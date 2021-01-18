@@ -1,0 +1,5 @@
+wb-mqtt-opcua (0.1.0) unstable; urgency=medium
+
+  * Initial release.
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.ru>  Thu, 14 Jan 2021 14:33:44 +0500
