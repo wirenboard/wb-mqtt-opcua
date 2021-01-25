@@ -273,6 +273,7 @@ namespace
         ~TServerImpl()
         {
             if (IsRunning) {
+                IsRunning = false;
                 if (ServerThread.joinable()) {
                     ServerThread.join();
                 }
