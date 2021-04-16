@@ -1,0 +1,14 @@
+[Unit]
+Description=Wiren Board MQTT to OPC UA gateway
+After=mosquitto.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+ExecStart=/usr/bin/wb-mqtt-opcua
+ExecStartPre=/usr/bin/wb-mqtt-opcua -g /etc/wb-mqtt-opcua.conf
+
+[Install]
+WantedBy=multi-user.target

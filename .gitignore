@@ -1,0 +1,18 @@
+*.o
+*.pyc
+.*.swp
+*.deb
+*.changes
+*.dsc
+*.log
+.debhelper
+.ropeproject
+debian/wb-mqtt-opcua
+test/test-app
+*.gcda
+*.gcno
+wb-mqtt-opcua
+build/
+
+# Visual Studio Code
+.vscode
