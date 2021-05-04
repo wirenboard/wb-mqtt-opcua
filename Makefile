@@ -29,7 +29,10 @@ COMMON_SRCS := $(shell find $(SRC_DIRS) \( -name *.cpp -or -name *.c \) -and -no
 COMMON_OBJS := $(COMMON_SRCS:%=$(BUILD_DIR)/%.o)
 
 LIB62541_BUILD_DIR = $(BUILD_DIR)/thirdparty/open62541
-LIB62541_INCLUDE = -I$(LIB62541_BUILD_DIR)/include
+
+# include/open62541 is created when building in devenv with version suffix
+# because of a strange hack in open62541's CMakeLists.txt
+LIB62541_INCLUDE = -I$(LIB62541_BUILD_DIR)/include -I$(LIB62541_BUILD_DIR)/include/open62541
 
 LDFLAGS = -lwbmqtt1 -ljsoncpp -lpthread $(LIB62541_BUILD_DIR)/bin/libopen62541.a
 CXXFLAGS = -std=c++14 -Wall -Werror $(LIB62541_INCLUDE) -I$(SRC_DIRS) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
