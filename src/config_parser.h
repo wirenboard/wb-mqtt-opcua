@@ -1,7 +1,7 @@
 #pragma once
 
-#include <jsoncpp/json/json.h>
 #include <wblib/wbmqtt.h>
+#include <wblib/json_utils.h>
 #include "OPCUAServer.h"
 
 struct TConfig
