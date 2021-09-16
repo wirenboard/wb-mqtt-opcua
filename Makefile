@@ -34,7 +34,7 @@ LIB62541_BUILD_DIR = $(BUILD_DIR)/thirdparty/open62541
 # because of a strange hack in open62541's CMakeLists.txt
 LIB62541_INCLUDE = -I$(LIB62541_BUILD_DIR)/include -I$(LIB62541_BUILD_DIR)/include/open62541
 
-LDFLAGS = -lwbmqtt1 -ljsoncpp -lpthread $(LIB62541_BUILD_DIR)/bin/libopen62541.a
+LDFLAGS = -lwbmqtt1 -lpthread $(LIB62541_BUILD_DIR)/bin/libopen62541.a
 CXXFLAGS = -std=c++14 -Wall -Werror $(LIB62541_INCLUDE) -I$(SRC_DIRS) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
 CFLAGS = -Wall $(LIB62541_INCLUDES) -I$(SRC_DIR)
 
@@ -69,14 +69,15 @@ $(BUILD_DIR)/test/%.o: test/%.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $^
 
 test: $(TEST_DIR)/$(TEST_TARGET)
+	rm -f $(TEST_DIR)/*.dat.out
 	if [ "$(shell arch)" != "armv7l" ] && [ "$(CROSS_COMPILE)" = "" ] || [ "$(CROSS_COMPILE)" = "x86_64-linux-gnu-" ]; then \
-		valgrind --error-exitcode=180 -q $(TEST_DIR)/$(TEST_TARGET) || \
+		valgrind --error-exitcode=180 -q $(TEST_DIR)/$(TEST_TARGET) $(TEST_ARGS) || \
 		if [ $$? = 180 ]; then \
 			echo "*** VALGRIND DETECTED ERRORS ***" 1>& 2; \
 			exit 1; \
-		fi \
-	else \
-		$(TEST_DIR)/$(TEST_TARGET); \
+		else $(TEST_DIR)/abt.sh show; exit 1; fi; \
+    else \
+        $(TEST_DIR)/$(TEST_TARGET) $(TEST_ARGS) || { $(TEST_DIR)/abt.sh show; exit 1; } \
 	fi
 
 $(TEST_DIR)/$(TEST_TARGET): $(TEST_OBJS) $(COMMON_OBJS) $(BUILD_DIR)/test/main.cpp.o
