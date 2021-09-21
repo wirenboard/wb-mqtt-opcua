@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.0.1) stable; urgency=medium
+
+  * Config generation error is fixed
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.ru>  Mon, 20 Sep 2021 13:52:35 +0500
+
 wb-mqtt-opcua (1.0.0) stable; urgency=medium
 
   * libwbmqtt1 dependency is updated to version 3.1.1

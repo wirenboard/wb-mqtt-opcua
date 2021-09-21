@@ -18,6 +18,8 @@ using namespace WBMQTT::JSON;
 
 namespace
 {
+    const auto GENERATOR_ID = "wb-mqtt-opcua-config_generator";
+
     std::string GetDeviceName(const std::string& topic)
     {
         return StringSplit(topic, '/')[0];
@@ -147,11 +149,12 @@ void UpdateConfig(const string& configFileName, const string& configSchemaFileNa
     JSON::Validate(config, JSON::Parse(configSchemaFileName));
 
     WBMQTT::TMosquittoMqttConfig mqttConfig;
+    mqttConfig.Id = GENERATOR_ID;
     LoadMqttConfig(mqttConfig, config);
     auto mqtt = NewMosquittoMqttClient(mqttConfig);
     auto backend = NewDriverBackend(mqtt);
     auto driver = NewDriver(TDriverArgs{}
-        .SetId("wb-mqtt-opcua-config_generator")
+        .SetId(GENERATOR_ID)
         .SetBackend(backend)
     );
     driver->StartLoop();
