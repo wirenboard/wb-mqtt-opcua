@@ -105,7 +105,7 @@ namespace
         attr.accessLevel = GetAccessLevel(driver, deviceName, controlName);
         attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)controlName.c_str());
         attr.valueRank   = UA_VALUERANK_SCALAR;
-        attr.dataType    = UA_NODEID_NUMERIC(0, UA_NS0ID_STRING);
+        attr.dataType    = UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
         auto tx = driver->BeginTx();
         auto dev = tx->GetDevice(deviceName);
         if (dev) {
@@ -125,7 +125,7 @@ namespace
                 } catch (...) {}
             }
         }
-        LOG(Error) << "Can't get data type for node '" + deviceName + "/" + controlName + "'. Fallback to string type.";
+        LOG(Error) << "Can't get data type for node '" + deviceName + "/" + controlName + "'. Fallback to BaseDataType.";
     }
 
     void ConfigureOpcUaServer(UA_ServerConfig* serverCfg, const OPCUA::TServerConfig& config)
@@ -133,6 +133,7 @@ namespace
         serverCfg->logger = MakeLogger();
 
         UA_ServerConfig_setBasics(serverCfg);
+        serverCfg->allowEmptyVariables = UA_RULEHANDLING_ACCEPT;
 
         UA_BuildInfo_clear(&serverCfg->buildInfo);
         UA_ApplicationDescription_clear(&serverCfg->applicationDescription);
@@ -289,7 +290,9 @@ namespace
             auto tx = Driver->BeginTx();
             auto ctrl = GetControl(tx, nodeIdName);
             if (!ctrl || ctrl->IsReadonly()) {
-                return UA_STATUSCODE_BADDEVICEFAILURE;
+                LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
+                           << (ctrl ? "It is read only" : "It is not presented in MQTT");
+                return UA_STATUSCODE_GOOD;
             }
             try {
                 if (dataValue->hasValue) {
@@ -314,7 +317,7 @@ namespace
                 }
                 return UA_STATUSCODE_BADDATATYPEIDUNKNOWN;
             } catch (const std::exception& e) {
-                LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
+                LOG(Error) << "Variable node '" + nodeIdName + "' write error: " << e.what();
                 return UA_STATUSCODE_BADDEVICEFAILURE;
             }
         }
@@ -325,7 +328,10 @@ namespace
             auto tx = Driver->BeginTx();
             auto ctrl = GetControl(tx, nodeIdName);
             if (!ctrl) {
-                return UA_STATUSCODE_BADDEVICEFAILURE;
+                LOG(Error) << "Control is not found '" + nodeIdName + "'";
+                dataValue->hasStatus = true;
+                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
+                return UA_STATUSCODE_GOOD;
             }
             try {
                 auto v = ctrl->GetValue();
@@ -343,11 +349,12 @@ namespace
                     }
                 }
                 dataValue->hasValue = true;
-                return UA_STATUSCODE_GOOD;
             } catch (const std::exception& e) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
-                return UA_STATUSCODE_BADDEVICEFAILURE;
+                dataValue->hasStatus = true;
+                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
             }
+            return UA_STATUSCODE_GOOD;
         }
     };
 
