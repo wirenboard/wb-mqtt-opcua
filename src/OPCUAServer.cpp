@@ -292,7 +292,7 @@ namespace
             if (!ctrl || ctrl->IsReadonly()) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
                            << (ctrl ? "It is read only" : "It is not presented in MQTT");
-                return UA_STATUSCODE_GOOD;
+                return UA_STATUSCODE_BADDEVICEFAILURE;
             }
             try {
                 if (dataValue->hasValue) {
