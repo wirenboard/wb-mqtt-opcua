@@ -1,7 +1,7 @@
 {
     "type": "object",
-    "title": "MQTT to OPC UA gateway configuration",
-    "description": "Configure topics to fields mapping and daemon configuration",
+    "title": "MQTT to OPC UA gateway",
+    "description": "opcua_description",
     "configFile": {
         "path": "/etc/wb-mqtt-opcua.conf",
         "service": "wb-mqtt-opcua"
@@ -134,7 +134,7 @@
                 "host": {
                     "type": "string",
                     "title": "Bind address",
-                    "description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
+                    "description": "bind_address_description",
                     "propertyOrder": 1
                 },
                 "port": {
@@ -171,5 +171,37 @@
     "options": {
         "disable_properties": true,
         "disable_collapse": true
+    },
+
+    "translations": {
+        "en": {
+            "opcua_description": "MQTT to OPC UA gateway configuration",
+            "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses"
+        },
+        "ru": {
+            "MQTT to OPC UA gateway": "Шлюз  MQTT - OPC UA",
+            "opcua_description": "Конфигурация шлюза MQTT - OPC UA",
+            "Enabled": "Включить обмен данными",
+            "MQTT device and control (from topic name)": "Устройство/канал",
+            "For information only": "Тип элемента управления",
+            "Group": "Группа",
+            "Group name": "Имя группы",
+            "Controls": "Элементы управления",
+            "Control": "Элемент управления",
+            "Enable debug logging": "Включить отладочные сообщения",
+            "MQTT connection": "Настройки соединения MQTT",
+            "Port": "Порт",
+            "Keep-alive interval": "Интервал проверки соединения",
+            "Enable username+password authentification": "Включить аутентификацию",
+            "Login": "Логин",
+            "Password": "Пароль",
+            "OPC UA binding": "Настройки связи OPC UA",
+            "Bind address": "IP-адрес",
+            "bind_address_description": "Локальный IP-адрес для шлюза OPC UA. Пустое поле означает привязку ко всем локальным IP-адресам",
+            "TCP port": "Порт",
+            "TCP port number to bing gateway to": "Номер порта TCP для шлюза OPC UA.",
+            "Groups of controls": "Группы элементов управления",
+            "Broker address": "Адрес брокера"
+        }
     }
 }
