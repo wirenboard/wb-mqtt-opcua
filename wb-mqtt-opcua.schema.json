@@ -1,6 +1,6 @@
 {
     "type": "object",
-    "title": "MQTT to OPC UA gateway",
+    "title": "MQTT to OPC UA gateway configuration",
     "description": "opcua_description",
     "configFile": {
         "path": "/etc/wb-mqtt-opcua.conf",
@@ -175,12 +175,12 @@
 
     "translations": {
         "en": {
-            "opcua_description": "MQTT to OPC UA gateway configuration",
+            "opcua_description": "Configure topics to fields mapping and daemon configuration",
             "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
             "control_info_title": "Type (for information only)"
         },
         "ru": {
-            "MQTT to OPC UA gateway": "Шлюз  MQTT - OPC UA",
+            "MQTT to OPC UA gateway configuration": "Шлюз  MQTT - OPC UA",
             "opcua_description": "Конфигурация шлюза MQTT - OPC UA",
             "Enabled": "Включить",
             "MQTT device and control (from topic name)": "Устройство/канал",
