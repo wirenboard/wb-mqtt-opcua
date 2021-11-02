@@ -1,6 +1,6 @@
 wb-mqtt-opcua (1.0.3) stable; urgency=medium
 
-  * Schema translation to Russian
+  * OPC UA schema translation to Russian
 
  -- Dmitry Vorobjev <d.vorobjev@wirenboard.ru>  Tue, 02 Nov 2021 14:02:05 +0300
 
