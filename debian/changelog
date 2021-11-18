@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.0.4) stable; urgency=medium
+
+  * mosquitto.target dependency is replaced by mosquitto.service
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.ru>  Thu, 18 Nov 2021 17:54:38 +0500
+
 wb-mqtt-opcua (1.0.3) stable; urgency=medium
 
   * OPC UA schema translation to Russian

@@ -1,6 +1,6 @@
 [Unit]
 Description=Wiren Board MQTT to OPC UA gateway
-After=mosquitto.target
+After=mosquitto.service
 
 [Service]
 Type=simple
