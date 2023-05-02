@@ -1,12 +1,12 @@
 #include "config_parser.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #include <sys/stat.h>
 
-#include <wblib/wbmqtt.h>
 #include <wblib/json_utils.h>
+#include <wblib/wbmqtt.h>
 
 #include "log.h"
 
@@ -153,10 +153,7 @@ void UpdateConfig(const string& configFileName, const string& configSchemaFileNa
     LoadMqttConfig(mqttConfig, config);
     auto mqtt = NewMosquittoMqttClient(mqttConfig);
     auto backend = NewDriverBackend(mqtt);
-    auto driver = NewDriver(TDriverArgs{}
-        .SetId(GENERATOR_ID)
-        .SetBackend(backend)
-    );
+    auto driver = NewDriver(TDriverArgs{}.SetId(GENERATOR_ID).SetBackend(backend));
     driver->StartLoop();
     UpdateConfig(driver, config);
     driver->StopLoop();

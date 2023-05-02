@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-#include <memory>
 #include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include <wblib/wbmqtt.h>
@@ -11,7 +11,8 @@ namespace OPCUA
 {
     struct TVariableNodeConfig
     {
-        std::string DeviceControlPair; //! DEVICE_NAME/CONTROL_NAME from MQTT (/devices/DEVICE_NAME/controls/CONTROL_NAME)
+        std::string
+            DeviceControlPair; //! DEVICE_NAME/CONTROL_NAME from MQTT (/devices/DEVICE_NAME/controls/CONTROL_NAME)
     };
 
     typedef std::vector<TVariableNodeConfig> TVariableNodesConfig;
@@ -22,7 +23,7 @@ namespace OPCUA
     //! OPC UA server configuration parameters
     struct TServerConfig
     {
-        //! Local IP to bind the server. If empty, the server will listen to all available local IP's 
+        //! Local IP to bind the server. If empty, the server will listen to all available local IP's
         std::string BindIp;
 
         //! Port to listen
