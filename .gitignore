@@ -16,3 +16,5 @@ build/
 
 # Visual Studio Code
 .vscode
+.devcontainer
+.clang-format

@@ -1,8 +1,14 @@
-wb-mqtt-opcua (1.0.5) stable; urgency=medium
+wb-mqtt-opcua (1.0.6) stable; urgency=medium
 
   * Fix control names
 
  -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Tue, 02 May 2023 18:25:00 +0400
+
+wb-mqtt-opcua (1.0.5) stable; urgency=medium
+
+  * Fix clang-format, no functional changes
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Tue, 02 May 2023 18:20:00 +0400
 
 wb-mqtt-opcua (1.0.4) stable; urgency=medium
 
