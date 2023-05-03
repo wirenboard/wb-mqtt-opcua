@@ -302,7 +302,7 @@ namespace
 
         UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
         {
-            std::string nodeIdName((const char*)snodeId->identifier.string.data);
+            std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
             auto tx = Driver->BeginTx();
             auto ctrl = GetControl(tx, nodeIdName);
             if (!ctrl || ctrl->IsReadonly()) {
@@ -340,7 +340,7 @@ namespace
 
         UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
         {
-            std::string nodeIdName((const char*)snodeId->identifier.string.data);
+            std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
             auto tx = Driver->BeginTx();
             auto ctrl = GetControl(tx, nodeIdName);
             if (!ctrl) {
