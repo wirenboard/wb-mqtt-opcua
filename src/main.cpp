@@ -3,8 +3,8 @@
 #include <wblib/signal_handling.h>
 #include <wblib/wbmqtt.h>
 
-#include "log.h"
 #include "OPCUAServer.h"
+#include "log.h"
 
 #include "config_parser.h"
 
@@ -16,9 +16,9 @@
 using namespace std;
 using namespace WBMQTT;
 
-const auto APP_NAME                             = "wb-mqtt-opcua";
-const auto CONFIG_FULL_FILE_PATH                = "/etc/wb-mqtt-opcua.conf";
-const auto CONFIG_JSON_SCHEMA_FULL_FILE_PATH    = "/usr/share/wb-mqtt-confed/schemas/wb-mqtt-opcua.schema.json";
+const auto APP_NAME = "wb-mqtt-opcua";
+const auto CONFIG_FULL_FILE_PATH = "/etc/wb-mqtt-opcua.conf";
+const auto CONFIG_JSON_SCHEMA_FULL_FILE_PATH = "/usr/share/wb-mqtt-confed/schemas/wb-mqtt-opcua.schema.json";
 
 const auto DRIVER_STOP_TIMEOUT_S = chrono::seconds(10);
 
@@ -57,90 +57,87 @@ namespace
              << "  -T  prefix    MQTT topic prefix (optional)" << endl;
     }
 
-    void ParseCommadLine(int                           argc,
-                         char*                         argv[],
-                         WBMQTT::TMosquittoMqttConfig& mqttConfig,
-                         string&                       configFile)
+    void ParseCommadLine(int argc, char* argv[], WBMQTT::TMosquittoMqttConfig& mqttConfig, string& configFile)
     {
         int debugLevel = 0;
         int c;
 
         while ((c = getopt(argc, argv, "d:c:g:p:h:T:u:P:")) != -1) {
             switch (c) {
-            case 'd':
-                debugLevel = stoi(optarg);
-                break;
-            case 'c':
-                configFile = optarg;
-                break;
-            case 'g':
-                try {
-                    UpdateConfig(optarg, CONFIG_JSON_SCHEMA_FULL_FILE_PATH);
-                } catch (const exception& e) {
-                    std::cerr << "FATAL: " << e.what();
-                    exit(1);
-                }
-                exit(0);
-            case 'p':
-                mqttConfig.Port = stoi(optarg);
-                break;
-            case 'h':
-                mqttConfig.Host = optarg;
-                break;
-            case 'T':
-                mqttConfig.Prefix = optarg;
-                break;
-            case 'u':
-                mqttConfig.User = optarg;
-                break;
-            case 'P':
-                mqttConfig.Password = optarg;
-                break;
-            default:
-                PrintUsage();
-                exit(2);
+                case 'd':
+                    debugLevel = stoi(optarg);
+                    break;
+                case 'c':
+                    configFile = optarg;
+                    break;
+                case 'g':
+                    try {
+                        UpdateConfig(optarg, CONFIG_JSON_SCHEMA_FULL_FILE_PATH);
+                    } catch (const exception& e) {
+                        std::cerr << "FATAL: " << e.what();
+                        exit(1);
+                    }
+                    exit(0);
+                case 'p':
+                    mqttConfig.Port = stoi(optarg);
+                    break;
+                case 'h':
+                    mqttConfig.Host = optarg;
+                    break;
+                case 'T':
+                    mqttConfig.Prefix = optarg;
+                    break;
+                case 'u':
+                    mqttConfig.User = optarg;
+                    break;
+                case 'P':
+                    mqttConfig.Password = optarg;
+                    break;
+                default:
+                    PrintUsage();
+                    exit(2);
             }
         }
 
         switch (debugLevel) {
-        case 0:
-            break;
-        case -1:
-            ::Info.SetEnabled(false);
-            break;
-        case -2:
-            WBMQTT::Info.SetEnabled(false);
-            break;
-        case -3:
-            WBMQTT::Info.SetEnabled(false);
-            ::Info.SetEnabled(false);
-            break;
-        case 1:
-            ::Debug.SetEnabled(true);
-            break;
-        case 2:
-            WBMQTT::Debug.SetEnabled(true);
-            break;
-        case 3:
-            WBMQTT::Debug.SetEnabled(true);
-            ::Debug.SetEnabled(true);
-            break;
-        default:
-            cout << "Invalid -d parameter value " << debugLevel << endl;
-            PrintUsage();
-            exit(2);
+            case 0:
+                break;
+            case -1:
+                ::Info.SetEnabled(false);
+                break;
+            case -2:
+                WBMQTT::Info.SetEnabled(false);
+                break;
+            case -3:
+                WBMQTT::Info.SetEnabled(false);
+                ::Info.SetEnabled(false);
+                break;
+            case 1:
+                ::Debug.SetEnabled(true);
+                break;
+            case 2:
+                WBMQTT::Debug.SetEnabled(true);
+                break;
+            case 3:
+                WBMQTT::Debug.SetEnabled(true);
+                ::Debug.SetEnabled(true);
+                break;
+            default:
+                cout << "Invalid -d parameter value " << debugLevel << endl;
+                PrintUsage();
+                exit(2);
         }
     }
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     TConfig config;
     string configFile(CONFIG_FULL_FILE_PATH);
 
     TPromise<void> initialized;
-    SignalHandling::Handle({ SIGINT, SIGTERM });
-    SignalHandling::OnSignals({ SIGINT, SIGTERM }, [&]{ SignalHandling::Stop(); });
+    SignalHandling::Handle({SIGINT, SIGTERM});
+    SignalHandling::OnSignals({SIGINT, SIGTERM}, [&] { SignalHandling::Stop(); });
     SetThreadName(APP_NAME);
 
     ParseCommadLine(argc, argv, config.Mqtt, configFile);
@@ -152,7 +149,7 @@ int main(int argc, char *argv[])
         exit(1);
     });
 
-    SignalHandling::SetOnTimeout(DRIVER_STOP_TIMEOUT_S, [&]{
+    SignalHandling::SetOnTimeout(DRIVER_STOP_TIMEOUT_S, [&] {
         LOG(Error) << "Driver takes too long to stop. Exiting.";
         exit(1);
     });
@@ -168,9 +165,9 @@ int main(int argc, char *argv[])
 
         SignalHandling::Start();
 
-        auto mqtt    = NewMosquittoMqttClient(config.Mqtt);
+        auto mqtt = NewMosquittoMqttClient(config.Mqtt);
         auto backend = NewDriverBackend(mqtt);
-        auto driver  = NewDriver(TDriverArgs{}.SetId(APP_NAME).SetBackend(backend));
+        auto driver = NewDriver(TDriverArgs{}.SetId(APP_NAME).SetBackend(backend));
 
         driver->StartLoop();
         driver->WaitForReady();
