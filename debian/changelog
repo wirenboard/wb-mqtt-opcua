@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.0.7) stable; urgency=medium
+
+  * Add dependency from libwbmqtt1-4. No functional changes
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.com>  Thu, 01 Jun 2023 17:31:09 +0500
+
 wb-mqtt-opcua (1.0.6) stable; urgency=medium
 
   * Fix control names
