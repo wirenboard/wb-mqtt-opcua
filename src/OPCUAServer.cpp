@@ -354,6 +354,7 @@ namespace
                     dataValue->hasStatus = true;
                     dataValue->status = UA_STATUSCODE_BADSENSORFAILURE;
                 } else {
+                    auto v = ctrl->GetValue();
                     if (v.Is<bool>()) {
                         auto value = v.As<bool>();
                         UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
