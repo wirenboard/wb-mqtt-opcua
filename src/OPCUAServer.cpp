@@ -350,21 +350,25 @@ namespace
                 return UA_STATUSCODE_GOOD;
             }
             try {
-                auto v = ctrl->GetValue();
-                if (v.Is<bool>()) {
-                    auto value = v.As<bool>();
-                    UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
+                if (ctrl->GetError().find("r") != std::string::npos) {
+                    dataValue->hasStatus = true;
+                    dataValue->status = UA_STATUSCODE_BADSENSORFAILURE;
                 } else {
-                    if (v.Is<double>()) {
-                        auto value = v.As<double>();
-                        UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
+                    if (v.Is<bool>()) {
+                        auto value = v.As<bool>();
+                        UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
                     } else {
-                        UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
-                        UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
-                        UA_String_clear(&stringValue);
+                        if (v.Is<double>()) {
+                            auto value = v.As<double>();
+                            UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
+                        } else {
+                            UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
+                            UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
+                            UA_String_clear(&stringValue);
+                        }
                     }
+                    dataValue->hasValue = true;
                 }
-                dataValue->hasValue = true;
             } catch (const std::exception& e) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
                 dataValue->hasStatus = true;
