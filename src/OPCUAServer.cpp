@@ -350,10 +350,11 @@ namespace
                 return UA_STATUSCODE_GOOD;
             }
             try {
+                dataValue->hasStatus = true;
                 if (ctrl->GetError().find("r") != std::string::npos) {
-                    dataValue->hasStatus = true;
-                    dataValue->status = UA_STATUSCODE_BADSENSORFAILURE;
-                    return UA_STATUSCODE_GOOD;
+                    dataValue->status = UA_STATUSCODE_UNCERTAINNOCOMMUNICATIONLASTUSABLEVALUE;
+                } else {
+                    dataValue->status = UA_STATUSCODE_GOOD;
                 }
                 auto v = ctrl->GetValue();
                 if (v.Is<bool>()) {
