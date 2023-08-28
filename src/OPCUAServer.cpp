@@ -352,7 +352,7 @@ namespace
             try {
                 dataValue->hasStatus = true;
                 if (ctrl->GetError().find("r") != std::string::npos) {
-                    dataValue->status = UA_STATUSCODE_UNCERTAINNOCOMMUNICATIONLASTUSABLEVALUE;
+                    dataValue->status = UA_STATUSCODE_BAD;
                 } else {
                     dataValue->status = UA_STATUSCODE_GOOD;
                 }
