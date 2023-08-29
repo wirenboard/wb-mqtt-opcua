@@ -346,7 +346,7 @@ namespace
             if (!ctrl) {
                 LOG(Error) << "Control is not found '" + nodeIdName + "'";
                 dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
+                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
                 return UA_STATUSCODE_GOOD;
             }
             try {
@@ -374,7 +374,7 @@ namespace
             } catch (const std::exception& e) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
                 dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
+                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
             }
             return UA_STATUSCODE_GOOD;
         }
