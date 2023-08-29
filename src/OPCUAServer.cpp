@@ -346,10 +346,16 @@ namespace
             if (!ctrl) {
                 LOG(Error) << "Control is not found '" + nodeIdName + "'";
                 dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
+                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
                 return UA_STATUSCODE_GOOD;
             }
             try {
+                dataValue->hasStatus = true;
+                if (ctrl->GetError().find("r") != std::string::npos) {
+                    dataValue->status = UA_STATUSCODE_BAD;
+                } else {
+                    dataValue->status = UA_STATUSCODE_GOOD;
+                }
                 auto v = ctrl->GetValue();
                 if (v.Is<bool>()) {
                     auto value = v.As<bool>();
@@ -368,7 +374,7 @@ namespace
             } catch (const std::exception& e) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
                 dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADDEVICEFAILURE;
+                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
             }
             return UA_STATUSCODE_GOOD;
         }
