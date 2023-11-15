@@ -1,4 +1,4 @@
-wb-mqtt-iec104 (1.1.2) stable; urgency=medium
+wb-mqtt-opcua (1.1.2) stable; urgency=medium
 
   * Add arm64 build, no functional changes
 
