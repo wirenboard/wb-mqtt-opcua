@@ -10,5 +10,8 @@ User=root
 ExecStart=/usr/bin/wb-mqtt-opcua
 ExecStartPre=/usr/bin/wb-mqtt-opcua -g /etc/wb-mqtt-opcua.conf
 
+# Service not restarting after return EXIT_NOTCONFIGURED
+RestartPreventExitStatus=6
+
 [Install]
 WantedBy=multi-user.target
