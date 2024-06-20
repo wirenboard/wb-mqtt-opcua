@@ -9,6 +9,7 @@
 #include <wblib/wbmqtt.h>
 
 #include "log.h"
+#include "opcua_exception.h"
 
 using namespace std;
 using namespace WBMQTT;
@@ -58,12 +59,17 @@ namespace
     OPCUA::TObjectNodesConfig LoadNodes(const Json::Value& config)
     {
         OPCUA::TObjectNodesConfig res;
+        bool anyEnabled = false;
         for (const auto& group: config["groups"]) {
             bool enabled = false;
             Get(group, "enabled", enabled);
             if (enabled) {
+                anyEnabled = true;
                 res.insert({group["name"].asString(), LoadVariableNodes(group["controls"])});
             }
+        }
+        if (!anyEnabled) {
+            throw TConfigException("Found no enabled groups!");
         }
         return res;
     }
