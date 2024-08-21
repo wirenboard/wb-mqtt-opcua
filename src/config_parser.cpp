@@ -137,16 +137,20 @@ namespace
 
 void LoadConfig(TConfig& cfg, const std::string& configFileName, const std::string& configSchemaFileName)
 {
-    auto config = JSON::Parse(configFileName);
-    JSON::Validate(config, JSON::Parse(configSchemaFileName));
+    try {
+        auto config = JSON::Parse(configFileName);
+        JSON::Validate(config, JSON::Parse(configSchemaFileName));
 
-    if (config.isMember("opcua")) {
-        Get(config["opcua"], "host", cfg.OpcUa.BindIp);
-        Get(config["opcua"], "port", cfg.OpcUa.BindPort);
+        if (config.isMember("opcua")) {
+            Get(config["opcua"], "host", cfg.OpcUa.BindIp);
+            Get(config["opcua"], "port", cfg.OpcUa.BindPort);
+        }
+        LoadMqttConfig(cfg.Mqtt, config);
+        cfg.OpcUa.ObjectNodes = LoadNodes(config);
+        Get(config, "debug", cfg.Debug);
+    } catch (const std::exception& e) {
+        throw TConfigException(e.what());
     }
-    LoadMqttConfig(cfg.Mqtt, config);
-    cfg.OpcUa.ObjectNodes = LoadNodes(config);
-    Get(config, "debug", cfg.Debug);
 }
 
 void UpdateConfig(const string& configFileName, const string& configSchemaFileName)
