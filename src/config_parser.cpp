@@ -148,6 +148,8 @@ void LoadConfig(TConfig& cfg, const std::string& configFileName, const std::stri
         LoadMqttConfig(cfg.Mqtt, config);
         cfg.OpcUa.ObjectNodes = LoadNodes(config);
         Get(config, "debug", cfg.Debug);
+    } catch (const TEmptyConfigException&) {
+        throw;
     } catch (const std::exception& e) {
         throw TConfigException(e.what());
     }

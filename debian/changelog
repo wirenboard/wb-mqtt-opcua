@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.1.7) stable; urgency=medium
+
+  * Fix empty config handling after previous update
+
+ -- Nikita Maslov <nikita.maslov@wirenboard.com>  Thu, 22 Aug 2024 12:22:19 +0500
+
 wb-mqtt-opcua (1.1.6) stable; urgency=medium
 
   * Do not restart service on config file error
