@@ -3,5 +3,9 @@
 %:
 	dh $@ --parallel
 
+override_dh_auto_build:
+	dh_auto_build -- open62541_build
+	dh_auto_build -- all
+
 override_dh_installinit:
 	dh_installinit --noscripts

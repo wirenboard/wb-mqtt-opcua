@@ -52,8 +52,7 @@ TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
 
-all: open62541_build 
-	$(MAKE) $(TARGET)
+all: $(TARGET)
 
 $(TARGET): $(COMMON_OBJS) $(BUILD_DIR)/src/main.cpp.o
 	${CXX} -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
