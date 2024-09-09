@@ -52,7 +52,8 @@ TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
 
-all: $(TARGET)
+all: open62541_build
+	$(MAKE) $(TARGET)
 
 $(TARGET): $(COMMON_OBJS) $(BUILD_DIR)/src/main.cpp.o
 	${CXX} -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
@@ -83,10 +84,14 @@ $(TEST_DIR)/$(TEST_TARGET): $(TEST_OBJS) $(COMMON_OBJS) $(BUILD_DIR)/test/main.c
 	$(CXX) -o $@ $^ $(LDFLAGS) $(TEST_LDFLAGS) -fno-lto
 
 open62541_build:
+ifeq (n,$(findstring n,$(firstword -$(MAKEFLAGS))))
+	@echo "Skip open62541 building in dry-run mode"
+else
 	mkdir -p $(LIB62541_BUILD_DIR)
 	cd $(LIB62541_BUILD_DIR); \
 	cmake -DCMAKE_INSTALL_PREFIX:PATH="" -DCMAKE_BUILD_TYPE:STRING="$(CMAKE_BUILD_TYPE)" -D CMAKE_C_COMPILER=$(CC) -D CMAKE_CXX_COMPILER=$(CXX) -D CMAKE_C_COMPILER_WORKS=1 -D CMAKE_CXX_COMPILER_WORKS=1 -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=NO $(LIB62541_DIR); \
 	$(MAKE) DESTDIR=./ install
+endif
 
 clean:
 	rm -rf $(BUILD_DIR)
