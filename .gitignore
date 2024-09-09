@@ -5,6 +5,7 @@
 *.changes
 *.dsc
 *.log
+*.buildinfo
 .debhelper
 .ropeproject
 debian/wb-mqtt-opcua
@@ -13,6 +14,7 @@ test/test-app
 *.gcno
 wb-mqtt-opcua
 build/
+compile_commands.json
 
 # Visual Studio Code
 .vscode
