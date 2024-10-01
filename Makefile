@@ -54,7 +54,7 @@ TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
 
 COV_REPORT ?= $(BUILD_DIR)/cov.html
-GCOVR_FLAGS := --html $(COV_REPORT) -e $(LIB62541_BUILD_DIR)
+GCOVR_FLAGS := -s --html $(COV_REPORT) -e $(LIB62541_BUILD_DIR)
 ifneq ($(COV_FAIL_UNDER),)
 	GCOVR_FLAGS += --fail-under-line $(COV_FAIL_UNDER)
 endif
