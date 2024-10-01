@@ -101,12 +101,13 @@ else
 endif
 
 clean:
-	rm -rf $(BUILD_DIR)
+	-rm -rf $(BUILD_DIR)
+	-rm -rf $(TEST_DIR)/$(TEST_TARGET)
 
 install:
+	install -Dm0755 $(BUILD_DIR)/$(TARGET) -t $(DESTDIR)$(PREFIX)/bin
 	install -Dm0644 wb-mqtt-opcua.schema.json -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-confed/schemas
 	install -Dm0644 wb-mqtt-opcua.sample.conf -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-opcua
-	install -Dm0755 $(BUILD_DIR)/$(TARGET) -t $(DESTDIR)$(PREFIX)/bin
 	install -Dm0644 wb-mqtt-opcua.wbconfigs $(DESTDIR)/etc/wb-configs.d/18wb-mqtt-opcua
 
 .PHONY: all test clean open62541_build
