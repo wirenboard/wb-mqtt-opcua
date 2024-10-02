@@ -53,8 +53,8 @@ TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
 
-COV_REPORT ?= $(BUILD_DIR)/cov.html
-GCOVR_FLAGS := -s --html $(COV_REPORT) -e $(LIB62541_BUILD_DIR)
+COV_REPORT ?= $(BUILD_DIR)/cov
+GCOVR_FLAGS := -e $(LIB62541_BUILD_DIR) -s --html $(COV_REPORT).html -x $(COV_REPORT).xml
 ifneq ($(COV_FAIL_UNDER),)
 	GCOVR_FLAGS += --fail-under-line $(COV_FAIL_UNDER)
 endif
