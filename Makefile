@@ -1,3 +1,5 @@
+PREFIX = /usr
+
 ifneq ($(DEB_HOST_MULTIARCH),)
 	CROSS_COMPILE ?= $(DEB_HOST_MULTIARCH)-
 endif
@@ -25,7 +27,7 @@ else
 	CMAKE_BUILD_TYPE=Debug
 endif
 
-COMMON_SRCS := $(shell find $(SRC_DIRS) \( -name *.cpp -or -name *.c \) -and -not -name main.cpp)
+COMMON_SRCS := $(shell find $(SRC_DIRS) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
 COMMON_OBJS := $(COMMON_SRCS:%=$(BUILD_DIR)/%.o)
 
 LIB62541_BUILD_DIR = $(BUILD_DIR)/thirdparty/open62541
@@ -41,16 +43,21 @@ CFLAGS = -Wall $(LIB62541_INCLUDES) -I$(SRC_DIR)
 ifeq ($(DEBUG),)
 	CXXFLAGS += -O2
 else
-	CXXFLAGS += -g -O0 -fprofile-arcs -ftest-coverage
-	LDFLAGS += -lgcov
+	CXXFLAGS += -g -O0 --coverage
+	LDFLAGS += --coverage
 endif
 
-
 TEST_DIR = test
-TEST_SRCS := $(shell find $(TEST_DIR) \( -name *.cpp -or -name *.c \) -and -not -name main.cpp)
+TEST_SRCS := $(shell find $(TEST_DIR) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
 TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
+
+COV_REPORT ?= $(BUILD_DIR)/cov
+GCOVR_FLAGS := -e $(LIB62541_BUILD_DIR) -s --html $(COV_REPORT).html -x $(COV_REPORT).xml
+ifneq ($(COV_FAIL_UNDER),)
+	GCOVR_FLAGS += --fail-under-line $(COV_FAIL_UNDER)
+endif
 
 all: open62541_build
 	$(MAKE) $(TARGET)
@@ -65,13 +72,10 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) -c $(CXXFLAGS) -o $@ $^
 
-$(BUILD_DIR)/test/%.o: test/%.cpp
-	$(CXX) -c $(CXXFLAGS) -o $@ $^
-
 test: $(TEST_DIR)/$(TEST_TARGET)
 	rm -f $(TEST_DIR)/*.dat.out
 	if [ "$(shell arch)" != "armv7l" ] && [ "$(CROSS_COMPILE)" = "" ] || [ "$(CROSS_COMPILE)" = "x86_64-linux-gnu-" ]; then \
-		valgrind --error-exitcode=180 -q $(TEST_DIR)/$(TEST_TARGET) $(TEST_ARGS) || \
+		valgrind $(VALGRIND_FLAGS) $(TEST_DIR)/$(TEST_TARGET) $(TEST_ARGS) || \
 		if [ $$? = 180 ]; then \
 			echo "*** VALGRIND DETECTED ERRORS ***" 1>& 2; \
 			exit 1; \
@@ -79,6 +83,9 @@ test: $(TEST_DIR)/$(TEST_TARGET)
     else \
         $(TEST_DIR)/$(TEST_TARGET) $(TEST_ARGS) || { $(TEST_DIR)/abt.sh show; exit 1; } \
 	fi
+ifneq ($(DEBUG),)
+	gcovr $(GCOVR_FLAGS) $(BUILD_DIR)/$(SRC_DIR) $(BUILD_DIR)/$(TEST_DIR)
+endif
 
 $(TEST_DIR)/$(TEST_TARGET): $(TEST_OBJS) $(COMMON_OBJS) $(BUILD_DIR)/test/main.cpp.o
 	$(CXX) -o $@ $^ $(LDFLAGS) $(TEST_LDFLAGS) -fno-lto
@@ -94,12 +101,13 @@ else
 endif
 
 clean:
-	rm -rf $(BUILD_DIR)
+	-rm -rf $(BUILD_DIR)
+	-rm -rf $(TEST_DIR)/$(TEST_TARGET)
 
 install:
-	install -D -m 0644 wb-mqtt-opcua.schema.json $(DESTDIR)/usr/share/wb-mqtt-confed/schemas/wb-mqtt-opcua.schema.json
-	install -D -m 0644 wb-mqtt-opcua.sample.conf $(DESTDIR)/usr/share/wb-mqtt-opcua/wb-mqtt-opcua.sample.conf
-	install -D -m 0755 $(BUILD_DIR)/$(TARGET) $(DESTDIR)/usr/bin/$(TARGET)
-	install -D -m 0644  wb-mqtt-opcua.wbconfigs $(DESTDIR)/etc/wb-configs.d/18wb-mqtt-opcua
+	install -Dm0755 $(BUILD_DIR)/$(TARGET) -t $(DESTDIR)$(PREFIX)/bin
+	install -Dm0644 wb-mqtt-opcua.schema.json -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-confed/schemas
+	install -Dm0644 wb-mqtt-opcua.sample.conf -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-opcua
+	install -Dm0644 wb-mqtt-opcua.wbconfigs $(DESTDIR)/etc/wb-configs.d/18wb-mqtt-opcua
 
 .PHONY: all test clean open62541_build
