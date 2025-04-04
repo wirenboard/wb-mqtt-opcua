@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.1.12) stable; urgency=medium
+
+  * Fix lintian
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Fri, 04 Apr 2025 09:00:00 +0400
+
 wb-mqtt-opcua (1.1.11) stable; urgency=medium
 
   * Fix tests, no functional changes
