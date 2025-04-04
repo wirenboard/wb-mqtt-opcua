@@ -15,3 +15,4 @@ Package: wb-mqtt-opcua
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Wiren Board MQTT to OPC UA gateway
+ MQTT to OPC UA gate for Wirenboard which follows Wiren Board MQTT Conventions.
