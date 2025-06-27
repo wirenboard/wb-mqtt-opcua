@@ -4,4 +4,5 @@ buildDebSbuild defaultTargets: 'bullseye-armhf bullseye-arm64',
                defaultClangTidyPreHook: 'make open62541_build',
                defaultRunCoverage: true,
                defaultCoverageMin: '30',
+               defaultDoCoverallsReporting: true,
                defaultBuildNode: 'heavy-duty'
