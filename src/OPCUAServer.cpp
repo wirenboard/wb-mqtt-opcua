@@ -242,8 +242,10 @@ namespace
                     browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
                     res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
                     if (res.statusCode != UA_STATUSCODE_GOOD) {
-                        std::unique_lock<std::mutex> lock(Mutex);
-                        ControlMap[nodeName] = event.Control;
+                        {
+                            std::unique_lock<std::mutex> lock(Mutex);
+                            ControlMap[nodeName] = event.Control;
+                        }
                         CreateVariableNode(parentNodeId, nodeName, event.Control);
                         break;
                     }
@@ -285,32 +287,36 @@ namespace
 
         UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
         {
-            std::unique_lock<std::mutex> lock(Mutex);
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto it = ControlMap.find(nodeIdName);
-            if (it == ControlMap.end() || it->second->IsReadonly()) {
-                LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. It is "
-                           << (it == ControlMap.end() ? "not presented in MQTT" : "read only");
-                return UA_STATUSCODE_BADDEVICEFAILURE;
+            WBMQTT::PControl control;
+            {
+                std::unique_lock<std::mutex> lock(Mutex);
+                auto it = ControlMap.find(nodeIdName);
+                if (it == ControlMap.end() || it->second->IsReadonly()) {
+                    LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. It is "
+                               << (it == ControlMap.end() ? "not presented in MQTT" : "read only");
+                    return UA_STATUSCODE_BADDEVICEFAILURE;
+                }
+                control = it->second;
             }
             auto tx = Driver->BeginTx();
             try {
                 if (dataValue->hasValue) {
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
                         auto value = *(UA_Boolean*)dataValue->value.data;
-                        it->second->SetValue(tx, value).Sync();
+                        control->SetValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE])) {
                         auto value = *(UA_Double*)dataValue->value.data;
-                        it->second->SetValue(tx, value).Sync();
+                        control->SetValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_STRING])) {
                         auto value = (char*)((UA_String*)dataValue->value.data)->data;
-                        it->second->SetRawValue(tx, value).Sync();
+                        control->SetRawValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
@@ -324,23 +330,27 @@ namespace
 
         UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
         {
-            std::unique_lock<std::mutex> lock(Mutex);
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto it = ControlMap.find(nodeIdName);
-            if (it == ControlMap.end()) {
-                LOG(Error) << "Control is not found '" + nodeIdName + "'";
-                dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
-                return UA_STATUSCODE_GOOD;
+            WBMQTT::PControl control;
+            {
+                std::unique_lock<std::mutex> lock(Mutex);
+                auto it = ControlMap.find(nodeIdName);
+                if (it == ControlMap.end()) {
+                    LOG(Error) << "Control is not found '" + nodeIdName + "'";
+                    dataValue->hasStatus = true;
+                    dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+                    return UA_STATUSCODE_GOOD;
+                }
+                control = it->second;
             }
             try {
                 dataValue->hasStatus = true;
-                if (it->second->GetError().find("r") != std::string::npos) {
+                if (control->GetError().find("r") != std::string::npos) {
                     dataValue->status = UA_STATUSCODE_BAD;
                 } else {
                     dataValue->status = UA_STATUSCODE_GOOD;
                 }
-                auto v = it->second->GetValue();
+                auto v = control->GetValue();
                 if (v.Is<bool>()) {
                     auto value = v.As<bool>();
                     UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
