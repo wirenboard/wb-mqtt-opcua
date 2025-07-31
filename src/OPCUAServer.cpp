@@ -154,6 +154,7 @@ namespace
      */
     class TServerImpl: public OPCUA::IServer
     {
+        std::mutex Mutex;
         std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
 
         UA_Server* Server;
@@ -241,6 +242,7 @@ namespace
                     browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
                     res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
                     if (res.statusCode != UA_STATUSCODE_GOOD) {
+                        std::unique_lock<std::mutex> lock(Mutex);
                         ControlMap[nodeName] = event.Control;
                         CreateVariableNode(parentNodeId, nodeName, event.Control);
                         break;
@@ -283,6 +285,7 @@ namespace
 
         UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
         {
+            std::unique_lock<std::mutex> lock(Mutex);
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
             auto it = ControlMap.find(nodeIdName);
             if (it == ControlMap.end() || it->second->IsReadonly()) {
@@ -321,6 +324,7 @@ namespace
 
         UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
         {
+            std::unique_lock<std::mutex> lock(Mutex);
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
             auto it = ControlMap.find(nodeIdName);
             if (it == ControlMap.end()) {
