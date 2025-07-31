@@ -162,6 +162,25 @@ namespace
         std::thread ServerThread;
         WBMQTT::PDeviceDriver Driver;
 
+        bool ControlExists(const std::string& nodeName)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            return ControlMap.find(nodeName) != ControlMap.end();
+        }
+
+        void AddControl(const std::string& nodeName, WBMQTT::PControl control)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            ControlMap[nodeName] = control;
+        }
+
+        WBMQTT::PControl GetControl(const std::string& nodeName)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            auto it = ControlMap.find(nodeName);
+            return it != ControlMap.end() ? it->second : nullptr;
+        }
+
         UA_NodeId CreateObjectNode(const std::string& nodeName)
         {
             UA_NodeId nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
@@ -221,12 +240,14 @@ namespace
                 if (event.RawValue.empty()) {
                     return;
                 }
-
                 auto it = config.ObjectNodes.find(event.Control->GetDevice()->GetId());
                 if (it == config.ObjectNodes.end()) {
                     return;
                 }
-
+                std::string nodeName = it->first + "/" + event.Control->GetId();
+                if (ControlExists(nodeName)) {
+                    return;
+                }
                 auto browseName = UA_QUALIFIEDNAME(1, (char*)it->first.c_str());
                 auto res = UA_Server_browseSimplifiedBrowsePath(Server,
                                                                 UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
@@ -234,7 +255,6 @@ namespace
                                                                 &browseName);
                 auto parentNodeId =
                     res.statusCode == UA_STATUSCODE_GOOD ? res.targets[0].targetId.nodeId : CreateObjectNode(it->first);
-                std::string nodeName = it->first + "/" + event.Control->GetId();
                 for (auto& valueNode: it->second) {
                     if (valueNode.DeviceControlPair != nodeName) {
                         continue;
@@ -242,10 +262,7 @@ namespace
                     browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
                     res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
                     if (res.statusCode != UA_STATUSCODE_GOOD) {
-                        {
-                            std::unique_lock<std::mutex> lock(Mutex);
-                            ControlMap[nodeName] = event.Control;
-                        }
+                        AddControl(nodeName, event.Control);
                         CreateVariableNode(parentNodeId, nodeName, event.Control);
                         break;
                     }
@@ -288,35 +305,30 @@ namespace
         UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
         {
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            WBMQTT::PControl control;
-            {
-                std::unique_lock<std::mutex> lock(Mutex);
-                auto it = ControlMap.find(nodeIdName);
-                if (it == ControlMap.end() || it->second->IsReadonly()) {
-                    LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. It is "
-                               << (it == ControlMap.end() ? "not presented in MQTT" : "read only");
-                    return UA_STATUSCODE_BADDEVICEFAILURE;
-                }
-                control = it->second;
+            auto ctrl = GetControl(nodeIdName);
+            if (!ctrl || ctrl->IsReadonly()) {
+                LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
+                           << (ctrl ? "It is read only" : "It is not presented in MQTT");
+                return UA_STATUSCODE_BADDEVICEFAILURE;
             }
             auto tx = Driver->BeginTx();
             try {
                 if (dataValue->hasValue) {
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
                         auto value = *(UA_Boolean*)dataValue->value.data;
-                        control->SetValue(tx, value).Sync();
+                        ctrl->SetValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE])) {
                         auto value = *(UA_Double*)dataValue->value.data;
-                        control->SetValue(tx, value).Sync();
+                        ctrl->SetValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_STRING])) {
                         auto value = (char*)((UA_String*)dataValue->value.data)->data;
-                        control->SetRawValue(tx, value).Sync();
+                        ctrl->SetRawValue(tx, value).Sync();
                         LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                         return UA_STATUSCODE_GOOD;
                     }
@@ -331,26 +343,21 @@ namespace
         UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
         {
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            WBMQTT::PControl control;
-            {
-                std::unique_lock<std::mutex> lock(Mutex);
-                auto it = ControlMap.find(nodeIdName);
-                if (it == ControlMap.end()) {
-                    LOG(Error) << "Control is not found '" + nodeIdName + "'";
-                    dataValue->hasStatus = true;
-                    dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
-                    return UA_STATUSCODE_GOOD;
-                }
-                control = it->second;
+            auto ctrl = GetControl(nodeIdName);
+            if (!ctrl) {
+                LOG(Error) << "Control is not found '" + nodeIdName + "'";
+                dataValue->hasStatus = true;
+                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+                return UA_STATUSCODE_GOOD;
             }
             try {
                 dataValue->hasStatus = true;
-                if (control->GetError().find("r") != std::string::npos) {
+                if (ctrl->GetError().find("r") != std::string::npos) {
                     dataValue->status = UA_STATUSCODE_BAD;
                 } else {
                     dataValue->status = UA_STATUSCODE_GOOD;
                 }
-                auto v = control->GetValue();
+                auto v = ctrl->GetValue();
                 if (v.Is<bool>()) {
                     auto value = v.As<bool>();
                     UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
