@@ -1,4 +1,4 @@
-wb-mqtt-opcua (1.1.13) stable; urgency=medium
+wb-mqtt-opcua (1.2.0) stable; urgency=medium
 
   * Refactor OPC UA nodes creation routine
 
