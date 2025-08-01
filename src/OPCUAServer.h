@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+#include <open62541/plugin/accesscontrol_default.h>
+#include <open62541/server.h>
+#include <open62541/server_config_default.h>
+#include <open62541/statuscodes.h>
+
 #include <wblib/wbmqtt.h>
 
 namespace OPCUA
@@ -37,6 +42,41 @@ namespace OPCUA
     {
     public:
         virtual ~IServer() = default;
+    };
+
+    /**! Basic gateway implementation.
+     *   The server creates ObjectNodes for groups from config and VariableNodes for MQTT controls.
+     *   OPC UA variable node id is DEVICE/CONTROL pair string.
+     *   The server translates writes to VariableNodes to publishing into appropriate "on" topics.
+     */
+    class TServerImpl: public OPCUA::IServer
+    {
+    public:
+        TServerImpl(const TServerConfig& config, WBMQTT::PDeviceDriver driver);
+        ~TServerImpl();
+
+        bool ControlExists(const std::string& nodeName);
+        void AddControl(const std::string& nodeName, WBMQTT::PControl control);
+        WBMQTT::PControl GetControl(const std::string& nodeName);
+
+        UA_StatusCode WriteVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue);
+        UA_StatusCode ReadVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue);
+
+        void ControlValueEventCallback(const WBMQTT::TControlValueEvent& event);
+
+    private:
+        std::mutex Mutex;
+        std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
+
+        UA_Server* Server;
+        volatile UA_Boolean IsRunning;
+        std::thread ServerThread;
+
+        const TServerConfig& Config;
+        WBMQTT::PDeviceDriver Driver;
+
+        UA_NodeId CreateObjectNode(const std::string& nodeName);
+        void CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control);
     };
 
     //! Make a new instance of server
