@@ -77,65 +77,26 @@ namespace
         return logger;
     }
 
-    UA_Byte GetAccessLevel(WBMQTT::PDeviceDriver driver, const std::string& deviceName, const std::string& controlName)
+    void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
     {
-        auto tx = driver->BeginTx();
-        auto dev = tx->GetDevice(deviceName);
-        if (dev) {
-            auto ctrl = dev->GetControl(controlName);
-            if (ctrl) {
-                return (ctrl->IsReadonly() ? UA_ACCESSLEVELMASK_READ
-                                           : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE);
-            }
-        }
-        return UA_ACCESSLEVELMASK_READ;
-    }
-
-    WBMQTT::PControl GetControl(WBMQTT::PDriverTx& tx, const std::string& nodeIdName)
-    {
-        auto components = WBMQTT::StringSplit(nodeIdName, "/");
-        if (components.size() < 2) {
-            return WBMQTT::PControl();
-        }
-
-        auto dev = tx->GetDevice(components[0]);
-        if (!dev) {
-            return WBMQTT::PControl();
-        }
-        return dev->GetControl(components[1]);
-    }
-
-    void SetVariableAttributes(UA_VariableAttributes& attr,
-                               WBMQTT::PDeviceDriver driver,
-                               const std::string& deviceName,
-                               const std::string& controlName)
-    {
-        attr.accessLevel = GetAccessLevel(driver, deviceName, controlName);
-        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)controlName.c_str());
+        attr.accessLevel =
+            control->IsReadonly() ? UA_ACCESSLEVELMASK_READ : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)control->GetId().c_str());
         attr.valueRank = UA_VALUERANK_SCALAR;
         attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
-        auto tx = driver->BeginTx();
-        auto dev = tx->GetDevice(deviceName);
-        if (dev) {
-            auto ctrl = dev->GetControl(controlName);
-            if (ctrl) {
-                try {
-                    auto v = ctrl->GetValue();
-                    if (v.Is<bool>()) {
-                        attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
-                        return;
-                    }
-                    if (v.Is<double>()) {
-                        attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
-                        return;
-                    }
-                    return;
-                } catch (...) {
-                }
+        try {
+            auto v = control->GetValue();
+            if (v.Is<bool>()) {
+                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
+                return;
             }
+            if (v.Is<double>()) {
+                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
+                return;
+            }
+            return;
+        } catch (...) {
         }
-        LOG(Error) << "Can't get data type for node '" + deviceName + "/" + controlName +
-                          "'. Fallback to BaseDataType.";
     }
 
     void ConfigureOpcUaServer(UA_ServerConfig* serverCfg, const OPCUA::TServerConfig& config)
@@ -193,12 +154,34 @@ namespace
      */
     class TServerImpl: public OPCUA::IServer
     {
+        std::mutex Mutex;
+        std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
+
         UA_Server* Server;
         volatile UA_Boolean IsRunning;
         std::thread ServerThread;
         WBMQTT::PDeviceDriver Driver;
 
-        UA_NodeId CreateObjectNode(const std::string& nodeName, const OPCUA::TVariableNodesConfig& variableNodes)
+        bool ControlExists(const std::string& nodeName)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            return ControlMap.find(nodeName) != ControlMap.end();
+        }
+
+        void AddControl(const std::string& nodeName, WBMQTT::PControl control)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            ControlMap[nodeName] = control;
+        }
+
+        WBMQTT::PControl GetControl(const std::string& nodeName)
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            auto it = ControlMap.find(nodeName);
+            return it != ControlMap.end() ? it->second : nullptr;
+        }
+
+        UA_NodeId CreateObjectNode(const std::string& nodeName)
         {
             UA_NodeId nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
             UA_ObjectAttributes oAttr = UA_ObjectAttributes_default;
@@ -218,33 +201,27 @@ namespace
             return nodeId;
         }
 
-        void CreateVariableNode(const UA_NodeId& parentNodeId,
-                                const OPCUA::TVariableNodeConfig& variableNode,
-                                WBMQTT::PDeviceDriver driver)
+        void CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control)
         {
-            auto components = WBMQTT::StringSplit(variableNode.DeviceControlPair, "/");
-
             UA_VariableAttributes oAttr = UA_VariableAttributes_default;
-            SetVariableAttributes(oAttr, driver, components[0], components[1]);
+            SetVariableAttributes(oAttr, control);
 
             UA_DataSource dataSource;
             dataSource.read = ReadVariableCallback;
             dataSource.write = WriteVariableCallback;
 
-            UA_NodeId nodeId = UA_NODEID_STRING(1, (char*)variableNode.DeviceControlPair.c_str());
-
             auto res = UA_Server_addDataSourceVariableNode(Server,
-                                                           nodeId,
+                                                           UA_NODEID_STRING(1, (char*)nodeName.c_str()),
                                                            parentNodeId,
                                                            UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
-                                                           UA_QUALIFIEDNAME(1, (char*)components[1].c_str()),
+                                                           UA_QUALIFIEDNAME(1, (char*)control->GetId().c_str()),
                                                            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
                                                            oAttr,
                                                            dataSource,
                                                            this,
                                                            nullptr);
             if (res != UA_STATUSCODE_GOOD) {
-                throw std::runtime_error("Variable node '" + variableNode.DeviceControlPair +
+                throw std::runtime_error("Variable node '" + nodeName +
                                          "' creation failed: " + UA_StatusCode_name(res));
             }
         }
@@ -259,6 +236,39 @@ namespace
                 throw std::runtime_error("OPC UA server initilization failed");
             }
 
+            Driver->On<WBMQTT::TControlValueEvent>([&](const WBMQTT::TControlValueEvent& event) {
+                if (event.RawValue.empty()) {
+                    return;
+                }
+                auto it = config.ObjectNodes.find(event.Control->GetDevice()->GetId());
+                if (it == config.ObjectNodes.end()) {
+                    return;
+                }
+                std::string nodeName = it->first + "/" + event.Control->GetId();
+                if (ControlExists(nodeName)) {
+                    return;
+                }
+                auto browseName = UA_QUALIFIEDNAME(1, (char*)it->first.c_str());
+                auto res = UA_Server_browseSimplifiedBrowsePath(Server,
+                                                                UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                                                                1,
+                                                                &browseName);
+                auto parentNodeId =
+                    res.statusCode == UA_STATUSCODE_GOOD ? res.targets[0].targetId.nodeId : CreateObjectNode(it->first);
+                for (auto& valueNode: it->second) {
+                    if (valueNode.DeviceControlPair != nodeName) {
+                        continue;
+                    }
+                    browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
+                    res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
+                    if (res.statusCode != UA_STATUSCODE_GOOD) {
+                        AddControl(nodeName, event.Control);
+                        CreateVariableNode(parentNodeId, nodeName, event.Control);
+                        break;
+                    }
+                }
+            });
+
             // Load external controls
             std::vector<std::string> deviceIds;
             for (const auto& device: config.ObjectNodes) {
@@ -268,16 +278,8 @@ namespace
             Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
             Driver->WaitForReady();
 
-            // Setup OPC UA server and nodes
+            // Setup and run OPC UA server
             ConfigureOpcUaServer(UA_Server_getConfig(Server), config);
-
-            for (auto& node: config.ObjectNodes) {
-                auto nodeId = CreateObjectNode(node.first, node.second);
-                for (auto& vn: node.second) {
-                    CreateVariableNode(nodeId, vn, driver);
-                }
-            }
-
             ServerThread = std::thread([this]() {
                 auto res = UA_Server_run(Server, &IsRunning);
                 if (res != UA_STATUSCODE_GOOD) {
@@ -303,13 +305,13 @@ namespace
         UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
         {
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto tx = Driver->BeginTx();
-            auto ctrl = GetControl(tx, nodeIdName);
+            auto ctrl = GetControl(nodeIdName);
             if (!ctrl || ctrl->IsReadonly()) {
                 LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
                            << (ctrl ? "It is read only" : "It is not presented in MQTT");
                 return UA_STATUSCODE_BADDEVICEFAILURE;
             }
+            auto tx = Driver->BeginTx();
             try {
                 if (dataValue->hasValue) {
                     if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
@@ -341,8 +343,7 @@ namespace
         UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
         {
             std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto tx = Driver->BeginTx();
-            auto ctrl = GetControl(tx, nodeIdName);
+            auto ctrl = GetControl(nodeIdName);
             if (!ctrl) {
                 LOG(Error) << "Control is not found '" + nodeIdName + "'";
                 dataValue->hasStatus = true;
