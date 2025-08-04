@@ -1,8 +1,14 @@
+wb-mqtt-opcua (1.2.1) stable; urgency=medium
+
+  * Refactor TServerImpl class and add server test, no functional changes
+
+ -- Ilya Titov <ilya.titov@wirenboard.com>  Fri, 1 Aug 2025 14:37:42 +0300
+
 wb-mqtt-opcua (1.2.0) stable; urgency=medium
 
   * Refactor OPC UA nodes creation routine
 
- -- Ilya Titov <ilya.titov@wirenboard.com>  Thu, 31 Jul 2025 08:08:08 +0400
+ -- Ilya Titov <ilya.titov@wirenboard.com>  Thu, 31 Jul 2025 08:08:08 +0300
 
 wb-mqtt-opcua (1.1.12) stable; urgency=medium
 

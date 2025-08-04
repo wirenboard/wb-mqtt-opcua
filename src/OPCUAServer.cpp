@@ -1,10 +1,5 @@
 #include "OPCUAServer.h"
 
-#include <open62541/plugin/accesscontrol_default.h>
-#include <open62541/server.h>
-#include <open62541/server_config_default.h>
-#include <open62541/statuscodes.h>
-
 #include <functional>
 #include <stdexcept>
 #include <vector>
@@ -60,7 +55,11 @@ namespace
                                        void* snodeContext,
                                        UA_Boolean ssourceTimeStamp,
                                        const UA_NumericRange* range,
-                                       UA_DataValue* dataValue);
+                                       UA_DataValue* dataValue)
+    {
+        OPCUA::TServerImpl* server = (OPCUA::TServerImpl*)(snodeContext);
+        return server->ReadVariable(snodeId, dataValue);
+    }
 
     UA_StatusCode WriteVariableCallback(UA_Server* server,
                                         const UA_NodeId* sessionId,
@@ -68,7 +67,11 @@ namespace
                                         const UA_NodeId* nodeId,
                                         void* nodeContext,
                                         const UA_NumericRange* range,
-                                        const UA_DataValue* data);
+                                        const UA_DataValue* data)
+    {
+        OPCUA::TServerImpl* s = (OPCUA::TServerImpl*)(nodeContext);
+        return s->WriteVariable(nodeId, data);
+    }
     }
 
     UA_Logger MakeLogger()
@@ -147,269 +150,233 @@ namespace
         }
     }
 
-    /**! Basic gateway implementation.
-     *   The server creates ObjectNodes for groups from config and VariableNodes for MQTT controls.
-     *   OPC UA variable node id is DEVICE/CONTROL pair string.
-     *   The server translates writes to VariableNodes to publishing into appropriate "on" topics.
-     */
-    class TServerImpl: public OPCUA::IServer
-    {
-        std::mutex Mutex;
-        std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
-
-        UA_Server* Server;
-        volatile UA_Boolean IsRunning;
-        std::thread ServerThread;
-        WBMQTT::PDeviceDriver Driver;
-
-        bool ControlExists(const std::string& nodeName)
-        {
-            std::unique_lock<std::mutex> lock(Mutex);
-            return ControlMap.find(nodeName) != ControlMap.end();
-        }
-
-        void AddControl(const std::string& nodeName, WBMQTT::PControl control)
-        {
-            std::unique_lock<std::mutex> lock(Mutex);
-            ControlMap[nodeName] = control;
-        }
-
-        WBMQTT::PControl GetControl(const std::string& nodeName)
-        {
-            std::unique_lock<std::mutex> lock(Mutex);
-            auto it = ControlMap.find(nodeName);
-            return it != ControlMap.end() ? it->second : nullptr;
-        }
-
-        UA_NodeId CreateObjectNode(const std::string& nodeName)
-        {
-            UA_NodeId nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
-            UA_ObjectAttributes oAttr = UA_ObjectAttributes_default;
-            oAttr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)nodeName.c_str());
-            auto res = UA_Server_addObjectNode(Server,
-                                               nodeId,
-                                               UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
-                                               UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
-                                               UA_QUALIFIEDNAME(1, (char*)nodeName.c_str()),
-                                               UA_NODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE),
-                                               oAttr,
-                                               nullptr,
-                                               nullptr);
-            if (res != UA_STATUSCODE_GOOD) {
-                throw std::runtime_error("Object node '" + nodeName + "' creation failed: " + UA_StatusCode_name(res));
-            }
-            return nodeId;
-        }
-
-        void CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control)
-        {
-            UA_VariableAttributes oAttr = UA_VariableAttributes_default;
-            SetVariableAttributes(oAttr, control);
-
-            UA_DataSource dataSource;
-            dataSource.read = ReadVariableCallback;
-            dataSource.write = WriteVariableCallback;
-
-            auto res = UA_Server_addDataSourceVariableNode(Server,
-                                                           UA_NODEID_STRING(1, (char*)nodeName.c_str()),
-                                                           parentNodeId,
-                                                           UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
-                                                           UA_QUALIFIEDNAME(1, (char*)control->GetId().c_str()),
-                                                           UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
-                                                           oAttr,
-                                                           dataSource,
-                                                           this,
-                                                           nullptr);
-            if (res != UA_STATUSCODE_GOOD) {
-                throw std::runtime_error("Variable node '" + nodeName +
-                                         "' creation failed: " + UA_StatusCode_name(res));
-            }
-        }
-
-    public:
-        TServerImpl(const OPCUA::TServerConfig& config, WBMQTT::PDeviceDriver driver)
-            : Server(UA_Server_new()),
-              IsRunning(true),
-              Driver(driver)
-        {
-            if (!Server) {
-                throw std::runtime_error("OPC UA server initilization failed");
-            }
-
-            Driver->On<WBMQTT::TControlValueEvent>([&](const WBMQTT::TControlValueEvent& event) {
-                if (event.RawValue.empty()) {
-                    return;
-                }
-                auto it = config.ObjectNodes.find(event.Control->GetDevice()->GetId());
-                if (it == config.ObjectNodes.end()) {
-                    return;
-                }
-                std::string nodeName = it->first + "/" + event.Control->GetId();
-                if (ControlExists(nodeName)) {
-                    return;
-                }
-                auto browseName = UA_QUALIFIEDNAME(1, (char*)it->first.c_str());
-                auto res = UA_Server_browseSimplifiedBrowsePath(Server,
-                                                                UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
-                                                                1,
-                                                                &browseName);
-                auto parentNodeId =
-                    res.statusCode == UA_STATUSCODE_GOOD ? res.targets[0].targetId.nodeId : CreateObjectNode(it->first);
-                for (auto& valueNode: it->second) {
-                    if (valueNode.DeviceControlPair != nodeName) {
-                        continue;
-                    }
-                    browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
-                    res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
-                    if (res.statusCode != UA_STATUSCODE_GOOD) {
-                        AddControl(nodeName, event.Control);
-                        CreateVariableNode(parentNodeId, nodeName, event.Control);
-                        break;
-                    }
-                }
-            });
-
-            // Load external controls
-            std::vector<std::string> deviceIds;
-            for (const auto& device: config.ObjectNodes) {
-                LOG(Debug) << "'" << device.first << "' is added to filter";
-                deviceIds.emplace_back(device.first);
-            }
-            Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
-            Driver->WaitForReady();
-
-            // Setup and run OPC UA server
-            ConfigureOpcUaServer(UA_Server_getConfig(Server), config);
-            ServerThread = std::thread([this]() {
-                auto res = UA_Server_run(Server, &IsRunning);
-                if (res != UA_STATUSCODE_GOOD) {
-                    LOG(Error) << UA_StatusCode_name(res);
-                    exit(1);
-                }
-            });
-        }
-
-        ~TServerImpl()
-        {
-            if (IsRunning) {
-                IsRunning = false;
-                if (ServerThread.joinable()) {
-                    ServerThread.join();
-                }
-            }
-            if (Server) {
-                UA_Server_delete(Server);
-            }
-        }
-
-        UA_StatusCode writeVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
-        {
-            std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto ctrl = GetControl(nodeIdName);
-            if (!ctrl || ctrl->IsReadonly()) {
-                LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
-                           << (ctrl ? "It is read only" : "It is not presented in MQTT");
-                return UA_STATUSCODE_BADDEVICEFAILURE;
-            }
-            auto tx = Driver->BeginTx();
-            try {
-                if (dataValue->hasValue) {
-                    if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
-                        auto value = *(UA_Boolean*)dataValue->value.data;
-                        ctrl->SetValue(tx, value).Sync();
-                        LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
-                        return UA_STATUSCODE_GOOD;
-                    }
-                    if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE])) {
-                        auto value = *(UA_Double*)dataValue->value.data;
-                        ctrl->SetValue(tx, value).Sync();
-                        LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
-                        return UA_STATUSCODE_GOOD;
-                    }
-                    if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_STRING])) {
-                        auto value = (char*)((UA_String*)dataValue->value.data)->data;
-                        ctrl->SetRawValue(tx, value).Sync();
-                        LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
-                        return UA_STATUSCODE_GOOD;
-                    }
-                }
-                return UA_STATUSCODE_BADDATATYPEIDUNKNOWN;
-            } catch (const std::exception& e) {
-                LOG(Error) << "Variable node '" + nodeIdName + "' write error: " << e.what();
-                return UA_STATUSCODE_BADDEVICEFAILURE;
-            }
-        }
-
-        UA_StatusCode readVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
-        {
-            std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
-            auto ctrl = GetControl(nodeIdName);
-            if (!ctrl) {
-                LOG(Error) << "Control is not found '" + nodeIdName + "'";
-                dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
-                return UA_STATUSCODE_GOOD;
-            }
-            try {
-                dataValue->hasStatus = true;
-                if (ctrl->GetError().find("r") != std::string::npos) {
-                    dataValue->status = UA_STATUSCODE_BAD;
-                } else {
-                    dataValue->status = UA_STATUSCODE_GOOD;
-                }
-                auto v = ctrl->GetValue();
-                if (v.Is<bool>()) {
-                    auto value = v.As<bool>();
-                    UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
-                } else {
-                    if (v.Is<double>()) {
-                        auto value = v.As<double>();
-                        UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
-                    } else {
-                        UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
-                        UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
-                        UA_String_clear(&stringValue);
-                    }
-                }
-                dataValue->hasValue = true;
-            } catch (const std::exception& e) {
-                LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
-                dataValue->hasStatus = true;
-                dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
-            }
-            return UA_STATUSCODE_GOOD;
-        }
-    };
-
-    extern "C" {
-    UA_StatusCode ReadVariableCallback(UA_Server* sserver,
-                                       const UA_NodeId* ssessionId,
-                                       void* ssessionContext,
-                                       const UA_NodeId* snodeId,
-                                       void* snodeContext,
-                                       UA_Boolean ssourceTimeStamp,
-                                       const UA_NumericRange* range,
-                                       UA_DataValue* dataValue)
-    {
-        TServerImpl* server = (TServerImpl*)(snodeContext);
-        return server->readVariable(snodeId, dataValue);
-    }
-
-    UA_StatusCode WriteVariableCallback(UA_Server* server,
-                                        const UA_NodeId* sessionId,
-                                        void* sessionContext,
-                                        const UA_NodeId* nodeId,
-                                        void* nodeContext,
-                                        const UA_NumericRange* range,
-                                        const UA_DataValue* data)
-    {
-        TServerImpl* s = (TServerImpl*)(nodeContext);
-        return s->writeVariable(nodeId, data);
-    }
-    }
 }
 
-std::unique_ptr<OPCUA::IServer> OPCUA::MakeServer(const OPCUA::TServerConfig& config, WBMQTT::PDeviceDriver driver)
+namespace OPCUA
 {
-    return std::unique_ptr<OPCUA::IServer>(new TServerImpl(config, driver));
+    TServerImpl::TServerImpl(const TServerConfig& config, WBMQTT::PDeviceDriver driver)
+        : Server(UA_Server_new()),
+          IsRunning(true),
+          Config(config),
+          Driver(driver)
+    {
+        if (!Server) {
+            throw std::runtime_error("OPC UA server initilization failed");
+        }
+
+        Driver->On<WBMQTT::TControlValueEvent>(
+            [&](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); });
+
+        // Load external controls
+        std::vector<std::string> deviceIds;
+        for (const auto& device: config.ObjectNodes) {
+            LOG(Debug) << "'" << device.first << "' is added to filter";
+            deviceIds.emplace_back(device.first);
+        }
+        Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
+        Driver->WaitForReady();
+
+        // Setup and run OPC UA server
+        ConfigureOpcUaServer(UA_Server_getConfig(Server), config);
+        ServerThread = std::thread([this]() {
+            auto res = UA_Server_run(Server, &IsRunning);
+            if (res != UA_STATUSCODE_GOOD) {
+                LOG(Error) << UA_StatusCode_name(res);
+                exit(1);
+            }
+        });
+    }
+
+    TServerImpl::~TServerImpl()
+    {
+        if (IsRunning) {
+            IsRunning = false;
+            if (ServerThread.joinable()) {
+                ServerThread.join();
+            }
+        }
+        if (Server) {
+            UA_Server_delete(Server);
+        }
+    }
+
+    bool TServerImpl::ControlExists(const std::string& nodeName)
+    {
+        std::unique_lock<std::mutex> lock(Mutex);
+        return ControlMap.find(nodeName) != ControlMap.end();
+    }
+
+    void TServerImpl::AddControl(const std::string& nodeName, WBMQTT::PControl control)
+    {
+        std::unique_lock<std::mutex> lock(Mutex);
+        ControlMap[nodeName] = control;
+    }
+
+    WBMQTT::PControl TServerImpl::GetControl(const std::string& nodeName)
+    {
+        std::unique_lock<std::mutex> lock(Mutex);
+        auto it = ControlMap.find(nodeName);
+        return it != ControlMap.end() ? it->second : nullptr;
+    }
+
+    UA_StatusCode TServerImpl::WriteVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue)
+    {
+        std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
+        auto ctrl = GetControl(nodeIdName);
+        if (!ctrl || ctrl->IsReadonly()) {
+            LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
+                       << (ctrl ? "It is read only" : "It is not presented in MQTT");
+            return UA_STATUSCODE_BADDEVICEFAILURE;
+        }
+        auto tx = Driver->BeginTx();
+        try {
+            if (dataValue->hasValue) {
+                if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
+                    auto value = *(UA_Boolean*)dataValue->value.data;
+                    ctrl->SetValue(tx, value).Sync();
+                    LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
+                    return UA_STATUSCODE_GOOD;
+                }
+                if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE])) {
+                    auto value = *(UA_Double*)dataValue->value.data;
+                    ctrl->SetValue(tx, value).Sync();
+                    LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
+                    return UA_STATUSCODE_GOOD;
+                }
+                if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_STRING])) {
+                    auto value = (char*)((UA_String*)dataValue->value.data)->data;
+                    ctrl->SetRawValue(tx, value).Sync();
+                    LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
+                    return UA_STATUSCODE_GOOD;
+                }
+            }
+            return UA_STATUSCODE_BADDATATYPEIDUNKNOWN;
+        } catch (const std::exception& e) {
+            LOG(Error) << "Variable node '" + nodeIdName + "' write error: " << e.what();
+            return UA_STATUSCODE_BADDEVICEFAILURE;
+        }
+    }
+
+    UA_StatusCode TServerImpl::ReadVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue)
+    {
+        std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
+        auto ctrl = GetControl(nodeIdName);
+        if (!ctrl) {
+            LOG(Error) << "Control is not found '" + nodeIdName + "'";
+            dataValue->hasStatus = true;
+            dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+            return UA_STATUSCODE_GOOD;
+        }
+        try {
+            dataValue->hasStatus = true;
+            if (ctrl->GetError().find("r") != std::string::npos) {
+                dataValue->status = UA_STATUSCODE_BAD;
+            } else {
+                dataValue->status = UA_STATUSCODE_GOOD;
+            }
+            auto v = ctrl->GetValue();
+            if (v.Is<bool>()) {
+                auto value = v.As<bool>();
+                UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
+            } else {
+                if (v.Is<double>()) {
+                    auto value = v.As<double>();
+                    UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
+                } else {
+                    UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
+                    UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
+                    UA_String_clear(&stringValue);
+                }
+            }
+            dataValue->hasValue = true;
+        } catch (const std::exception& e) {
+            LOG(Error) << "Variable node '" + nodeIdName + "' read error: " << e.what();
+            dataValue->hasStatus = true;
+            dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+        }
+        return UA_STATUSCODE_GOOD;
+    }
+
+    void TServerImpl::ControlValueEventCallback(const WBMQTT::TControlValueEvent& event)
+    {
+        if (event.RawValue.empty()) {
+            return;
+        }
+        auto it = Config.ObjectNodes.find(event.Control->GetDevice()->GetId());
+        if (it == Config.ObjectNodes.end()) {
+            return;
+        }
+        std::string nodeName = it->first + "/" + event.Control->GetId();
+        if (ControlExists(nodeName)) {
+            return;
+        }
+        auto browseName = UA_QUALIFIEDNAME(1, (char*)it->first.c_str());
+        auto res =
+            UA_Server_browseSimplifiedBrowsePath(Server, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER), 1, &browseName);
+        auto parentNodeId =
+            res.statusCode == UA_STATUSCODE_GOOD ? res.targets[0].targetId.nodeId : CreateObjectNode(it->first);
+        for (auto& valueNode: it->second) {
+            if (valueNode.DeviceControlPair != nodeName) {
+                continue;
+            }
+            browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
+            res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
+            if (res.statusCode != UA_STATUSCODE_GOOD) {
+                AddControl(nodeName, event.Control);
+                CreateVariableNode(parentNodeId, nodeName, event.Control);
+                break;
+            }
+        }
+    }
+
+    UA_NodeId TServerImpl::CreateObjectNode(const std::string& nodeName)
+    {
+        UA_NodeId nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
+        UA_ObjectAttributes oAttr = UA_ObjectAttributes_default;
+        oAttr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)nodeName.c_str());
+        auto res = UA_Server_addObjectNode(Server,
+                                           nodeId,
+                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                                           UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+                                           UA_QUALIFIEDNAME(1, (char*)nodeName.c_str()),
+                                           UA_NODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE),
+                                           oAttr,
+                                           nullptr,
+                                           nullptr);
+        if (res != UA_STATUSCODE_GOOD) {
+            throw std::runtime_error("Object node '" + nodeName + "' creation failed: " + UA_StatusCode_name(res));
+        }
+        return nodeId;
+    }
+
+    void TServerImpl::CreateVariableNode(const UA_NodeId& parentNodeId,
+                                         const std::string& nodeName,
+                                         WBMQTT::PControl control)
+    {
+        UA_VariableAttributes oAttr = UA_VariableAttributes_default;
+        SetVariableAttributes(oAttr, control);
+
+        UA_DataSource dataSource;
+        dataSource.read = ReadVariableCallback;
+        dataSource.write = WriteVariableCallback;
+
+        auto res = UA_Server_addDataSourceVariableNode(Server,
+                                                       UA_NODEID_STRING(1, (char*)nodeName.c_str()),
+                                                       parentNodeId,
+                                                       UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
+                                                       UA_QUALIFIEDNAME(1, (char*)control->GetId().c_str()),
+                                                       UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+                                                       oAttr,
+                                                       dataSource,
+                                                       this,
+                                                       nullptr);
+        if (res != UA_STATUSCODE_GOOD) {
+            throw std::runtime_error("Variable node '" + nodeName + "' creation failed: " + UA_StatusCode_name(res));
+        }
+    }
+
+    std::unique_ptr<IServer> MakeServer(const TServerConfig& config, WBMQTT::PDeviceDriver driver)
+    {
+        return std::unique_ptr<IServer>(new TServerImpl(config, driver));
+    }
 }
