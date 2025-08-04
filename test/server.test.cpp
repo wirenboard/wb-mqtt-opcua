@@ -23,6 +23,8 @@ protected:
     }
 };
 
+// Check that server control map contains the control after MQTT driver callback.
+// Control added to the map when OPC UA nodes are created.
 TEST_F(TServerTest, control)
 {
     TConfig config;
