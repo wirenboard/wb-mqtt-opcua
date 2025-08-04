@@ -33,6 +33,7 @@ TEST_F(TServerTest, control)
     auto backend = NewDriverBackend(mqttClient);
     auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
     driver->StartLoop();
+    driver->WaitForReady();
 
     auto tx = driver->BeginTx();
     auto device = tx->CreateDevice(TLocalDeviceArgs{}.SetId("test")).GetValue();
