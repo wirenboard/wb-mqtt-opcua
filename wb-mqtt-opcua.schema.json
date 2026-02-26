@@ -22,6 +22,7 @@
                     "type": "string",
                     "title": "MQTT device and control (from topic name)",
                     "propertyOrder": 2,
+                    "readonly": true,
                     "options": {
                         "wb": {
                             "data": "devices"
@@ -32,7 +33,8 @@
                 "info": {
                     "type": "string",
                     "title": "control_info_title",
-                    "propertyOrder": 3
+                    "propertyOrder": 3,
+                    "readonly": true
                 }
             },
             "required": ["topic"]
@@ -51,7 +53,8 @@
                 "name": {
                     "type": "string",
                     "title": "Group name",
-                    "propertyOrder": 2
+                    "propertyOrder": 2,
+                    "readonly": true
                 },
                 "controls": {
                     "type": "array",
@@ -63,6 +66,9 @@
                     },
                     "options": {
                         "disable_array_reorder": true,
+                        "disable_array_delete_last_row": true,
+                        "disable_array_delete_all_rows": true,
+                        "disable_array_add": true,
                         "disable_collapse": true
                     }
                 }
@@ -76,12 +82,20 @@
         }
     },
     "properties": {
+        "update_groups": {
+            "type": "boolean",
+            "title": "Update groups list",
+            "description": "update_groups_description",
+            "default": false,
+            "_format": "checkbox",
+            "propertyOrder": 1
+        },
         "debug": {
             "type": "boolean",
             "title": "Enable debug logging",
             "default": false,
             "_format": "checkbox",
-            "propertyOrder": 1
+            "propertyOrder": 2
         },
         "mqtt": {
             "type": "object",
@@ -127,7 +141,8 @@
                 }
             },
             "required": ["host", "port"],
-            "propertyOrder": 2,
+            "propertyOrder": 3,
+            "additionalProperties": false,
             "options": {
                 "disable_edit_json": true,
                 "disable_collapse": true
@@ -153,7 +168,7 @@
                     "propertyOrder": 2
                 }
             },
-            "propertyOrder": 3,
+            "propertyOrder": 4,
             "options": {
                 "disable_edit_json": true,
                 "disable_collapse": true,
@@ -163,12 +178,15 @@
         "groups": {
             "type": "array",
             "title": "Groups of controls",
-            "propertyOrder": 4,
+            "propertyOrder": 5,
             "items": {
                 "$ref": "#/definitions/group"
             },
             "options": {
                 "disable_array_reorder": true,
+                "disable_array_delete_last_row": true,
+                "disable_array_delete_all_rows": true,
+                "disable_array_add": true,
                 "disable_collapse": true
             },
             "_format": "tabs"
@@ -181,11 +199,14 @@
 
     "translations": {
         "en": {
+            "update_groups_description": "This flag will be cleared on next start of daemon",
             "opcua_description": "Configure topics to fields mapping and daemon configuration",
             "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
             "control_info_title": "Type (for information only)"
         },
         "ru": {
+            "Update groups list": "Обновить список групп",
+            "update_groups_description": "Опция будет сброшена при следующем запуске сервиса",
             "MQTT to OPC UA gateway configuration": "Шлюз  MQTT - OPC UA",
             "opcua_description": "Конфигурация шлюза MQTT - OPC UA",
             "Enabled": "Включить",

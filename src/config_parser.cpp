@@ -160,15 +160,21 @@ void UpdateConfig(const string& configFileName, const string& configSchemaFileNa
     auto config = JSON::Parse(configFileName);
     JSON::Validate(config, JSON::Parse(configSchemaFileName));
 
-    WBMQTT::TMosquittoMqttConfig mqttConfig;
-    mqttConfig.Id = GENERATOR_ID;
-    LoadMqttConfig(mqttConfig, config);
-    auto mqtt = NewMosquittoMqttClient(mqttConfig);
-    auto backend = NewDriverBackend(mqtt);
-    auto driver = NewDriver(TDriverArgs{}.SetId(GENERATOR_ID).SetBackend(backend));
-    driver->StartLoop();
-    UpdateConfig(driver, config);
-    driver->StopLoop();
+    bool update_groups = false;
+    Get(config, "update_groups", update_groups);
+    if (update_groups) {
+        WBMQTT::TMosquittoMqttConfig mqttConfig;
+        mqttConfig.Id = GENERATOR_ID;
+        LoadMqttConfig(mqttConfig, config);
+        auto mqtt = NewMosquittoMqttClient(mqttConfig);
+        auto backend = NewDriverBackend(mqtt);
+        auto driver = NewDriver(TDriverArgs{}.SetId(GENERATOR_ID).SetBackend(backend));
+        driver->StartLoop();
+        UpdateConfig(driver, config);
+        driver->StopLoop();
+    }
+
+    config["update_groups"] = false;
 
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "    ";
