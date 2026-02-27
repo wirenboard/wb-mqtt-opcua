@@ -11,6 +11,7 @@
 
 namespace
 {
+    const auto APPLICATION_URI = "urn:wb-mqtt-opcua.server.application";
     const char* LogCategoryNames[UA_LOGCATEGORIES] = {"network",
                                                       "channel",
                                                       "session",
@@ -140,7 +141,7 @@ namespace
 
         UA_BuildInfo_clear(&serverCfg->buildInfo);
         UA_ApplicationDescription_clear(&serverCfg->applicationDescription);
-        serverCfg->applicationDescription.applicationUri = UA_STRING_ALLOC("urn:wb-mqtt-opcua.server.application");
+        serverCfg->applicationDescription.applicationUri = UA_STRING_ALLOC(APPLICATION_URI);
         serverCfg->applicationDescription.productUri = UA_STRING_ALLOC("https://wirenboard.com");
         serverCfg->applicationDescription.applicationName =
             UA_LOCALIZEDTEXT_ALLOC("en", "Wiren Board MQTT to OPC UA gateway");
@@ -155,11 +156,18 @@ namespace
             throw std::runtime_error(std::string("OPC UA security policy addition failed: ") + UA_StatusCode_name(res));
         }
 
+        if (config.Auth) {
+            LOG(Warn) << "OPC UA password will be transmitted in plain text";
+            serverCfg->allowNonePolicyPassword = true;
+        }
+
+        UA_UsernamePasswordLogin login = {UA_STRING((char*)config.User.c_str()),
+                                          UA_STRING((char*)config.Password.c_str())};
         res = UA_AccessControl_default(serverCfg,
-                                       true,
+                                       !config.Auth,
                                        &serverCfg->securityPolicies[serverCfg->securityPoliciesSize - 1].policyUri,
-                                       0,
-                                       nullptr);
+                                       config.Auth ? 1 : 0,
+                                       &login);
         if (res != UA_STATUSCODE_GOOD) {
             throw std::runtime_error(std::string("OPC UA access control configuration failed: ") +
                                      UA_StatusCode_name(res));

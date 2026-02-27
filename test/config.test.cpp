@@ -1,4 +1,5 @@
 #include "config_parser.h"
+#include "opcua_exception.h"
 
 #include <gtest/gtest.h>
 #include <vector>
@@ -38,6 +39,12 @@ TEST_F(TLoadConfigTest, bad_config)
         ASSERT_THROW(LoadConfig(cfg, TestRootDir + "/bad/bad" + std::to_string(i) + ".conf", SchemaFile),
                      std::runtime_error)
             << i;
+    }
+
+    // authentication is enabled, but username is empty
+    {
+        TConfig cfg;
+        ASSERT_THROW(LoadConfig(cfg, TestRootDir + "/bad/bad_auth.conf", SchemaFile), TConfigException);
     }
 
     // bad topic name

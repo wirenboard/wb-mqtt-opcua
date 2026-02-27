@@ -133,6 +133,22 @@ namespace
             }
         }
     }
+
+    void LoadOpcuaConfig(OPCUA::TServerConfig& cfg, const Json::Value& configRoot)
+    {
+        if (configRoot.isMember("opcua")) {
+            Get(configRoot["opcua"], "host", cfg.BindIp);
+            Get(configRoot["opcua"], "port", cfg.BindPort);
+            Get(configRoot["opcua"], "auth", cfg.Auth);
+            if (cfg.Auth) {
+                Get(configRoot["opcua"], "username", cfg.User);
+                Get(configRoot["opcua"], "password", cfg.Password);
+                if (cfg.User.empty()) {
+                    throw std::runtime_error("OPC UA username must be set if authentication is enabled");
+                }
+            }
+        }
+    }
 }
 
 void LoadConfig(TConfig& cfg, const std::string& configFileName, const std::string& configSchemaFileName)
@@ -141,10 +157,7 @@ void LoadConfig(TConfig& cfg, const std::string& configFileName, const std::stri
         auto config = JSON::Parse(configFileName);
         JSON::Validate(config, JSON::Parse(configSchemaFileName));
 
-        if (config.isMember("opcua")) {
-            Get(config["opcua"], "host", cfg.OpcUa.BindIp);
-            Get(config["opcua"], "port", cfg.OpcUa.BindPort);
-        }
+        LoadOpcuaConfig(cfg.OpcUa, config);
         LoadMqttConfig(cfg.Mqtt, config);
         cfg.OpcUa.ObjectNodes = LoadNodes(config);
         Get(config, "debug", cfg.Debug);

@@ -34,6 +34,11 @@ namespace OPCUA
         //! Port to listen
         uint32_t BindPort = 4840;
 
+        //! Authentication. If disabled, anonymous access is allowed
+        bool Auth = false;
+        std::string User = "";
+        std::string Password = "";
+
         TObjectNodesConfig ObjectNodes;
     };
 

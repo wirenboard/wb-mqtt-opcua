@@ -123,7 +123,7 @@
                 },
                 "auth": {
                     "type": "boolean",
-                    "title": "Enable username+password authentification",
+                    "title": "Enable username+password authentication",
                     "default": false,
                     "_format": "checkbox",
                     "propertyOrder": 4
@@ -150,6 +150,7 @@
         "opcua": {
             "type": "object",
             "title": "OPC UA binding",
+            "defaultProperties": ["host", "port"],
             "properties": {
                 "host": {
                     "type": "string",
@@ -160,18 +161,35 @@
                 "port": {
                     "type": "integer",
                     "title": "TCP port",
-                    "description": "TCP port number to bing gateway to",
+                    "description": "TCP port number to bind gateway to",
                     "default": 4840,
                     "minimum": 1,
                     "maximum": 65535,
                     "propertyOrder": 2
+                },
+                "auth": {
+                    "type": "boolean",
+                    "title": "Enable username+password authentication",
+                    "default": false,
+                    "_format": "checkbox",
+                    "propertyOrder": 3
+                },
+                "username": {
+                    "type": "string",
+                    "title": "Login",
+                    "propertyOrder": 4
+                },
+                "password": {
+                    "type": "string",
+                    "title": "Password",
+                    "_format": "password",
+                    "propertyOrder": 5
                 }
             },
             "propertyOrder": 4,
             "options": {
                 "disable_edit_json": true,
-                "disable_collapse": true,
-                "disable_properties": true
+                "disable_collapse": true
             }
         },
         "groups": {
@@ -219,14 +237,14 @@
             "MQTT connection": "Настройки соединения MQTT",
             "Port": "Порт",
             "Keep-alive interval": "Интервал проверки соединения",
-            "Enable username+password authentification": "Включить аутентификацию по логину и паролю",
+            "Enable username+password authentication": "Включить аутентификацию по логину и паролю",
             "Login": "Логин",
             "Password": "Пароль",
             "OPC UA binding": "Настройки связи OPC UA",
             "Bind address": "IP-адрес",
             "bind_address_description": "Локальный IP-адрес для шлюза OPC UA. Пустое поле означает привязку ко всем локальным IP-адресам",
             "TCP port": "Порт",
-            "TCP port number to bing gateway to": "Номер TCP-порта для шлюза OPC UA",
+            "TCP port number to bind gateway to": "Номер TCP-порта для шлюза OPC UA",
             "Groups of controls": "Группы элементов управления",
             "Broker address": "Адрес брокера"
         }
