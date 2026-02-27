@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
         driver->StartLoop();
         driver->WaitForReady();
 
-        auto IecServer(OPCUA::MakeServer(config.OpcUa, driver));
+        auto OpcuaServer(OPCUA::MakeServer(config.OpcUa, driver));
 
         initialized.Complete();
         SignalHandling::Wait();
