@@ -142,7 +142,6 @@
             },
             "required": ["host", "port"],
             "propertyOrder": 3,
-            "additionalProperties": false,
             "options": {
                 "disable_edit_json": true,
                 "disable_collapse": true
