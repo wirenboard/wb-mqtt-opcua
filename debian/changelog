@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.3.0) stable; urgency=medium
+
+  * Add option to prevent groups update
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Wed, 25 Feb 2026 17:00:00 +0400
+
 wb-mqtt-opcua (1.2.1) stable; urgency=medium
 
   * Refactor TServerImpl class and add server test, no functional changes
