@@ -57,6 +57,7 @@ namespace OPCUA
 
         bool ControlExists(const std::string& nodeName);
         void AddControl(const std::string& nodeName, WBMQTT::PControl control);
+        void RemoveControl(const std::string& nodeName);
         WBMQTT::PControl GetControl(const std::string& nodeName);
 
         UA_StatusCode WriteVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue);
