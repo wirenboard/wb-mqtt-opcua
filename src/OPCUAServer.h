@@ -76,8 +76,10 @@ namespace OPCUA
         const TServerConfig& Config;
         WBMQTT::PDeviceDriver Driver;
 
-        UA_NodeId CreateObjectNode(const std::string& nodeName);
-        void CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control);
+    protected:
+        virtual UA_NodeId CreateObjectNode(const std::string& nodeName);
+        virtual void
+        CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control);
     };
 
     //! Make a new instance of server
