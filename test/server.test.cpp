@@ -15,8 +15,7 @@ namespace
     class TFailingServer: public OPCUA::TServerImpl
     {
     public:
-        TFailingServer(const OPCUA::TServerConfig& config, WBMQTT::PDeviceDriver driver)
-            : TServerImpl(config, driver)
+        TFailingServer(const OPCUA::TServerConfig& config, WBMQTT::PDeviceDriver driver): TServerImpl(config, driver)
         {}
 
     protected:

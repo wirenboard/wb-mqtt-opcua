@@ -78,8 +78,9 @@ namespace OPCUA
 
     protected:
         virtual UA_NodeId CreateObjectNode(const std::string& nodeName);
-        virtual void
-        CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control);
+        virtual void CreateVariableNode(const UA_NodeId& parentNodeId,
+                                        const std::string& nodeName,
+                                        WBMQTT::PControl control);
     };
 
     //! Make a new instance of server
