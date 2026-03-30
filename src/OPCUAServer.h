@@ -57,6 +57,7 @@ namespace OPCUA
 
         bool ControlExists(const std::string& nodeName);
         void AddControl(const std::string& nodeName, WBMQTT::PControl control);
+        void RemoveControl(const std::string& nodeName);
         WBMQTT::PControl GetControl(const std::string& nodeName);
 
         UA_StatusCode WriteVariable(const UA_NodeId* snodeId, const UA_DataValue* dataValue);
@@ -75,8 +76,11 @@ namespace OPCUA
         const TServerConfig& Config;
         WBMQTT::PDeviceDriver Driver;
 
-        UA_NodeId CreateObjectNode(const std::string& nodeName);
-        void CreateVariableNode(const UA_NodeId& parentNodeId, const std::string& nodeName, WBMQTT::PControl control);
+    protected:
+        virtual UA_NodeId CreateObjectNode(const std::string& nodeName);
+        virtual void CreateVariableNode(const UA_NodeId& parentNodeId,
+                                        const std::string& nodeName,
+                                        WBMQTT::PControl control);
     };
 
     //! Make a new instance of server

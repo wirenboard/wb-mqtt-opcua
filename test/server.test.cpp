@@ -10,6 +10,24 @@
 
 using namespace WBMQTT;
 
+namespace
+{
+    class TFailingServer: public OPCUA::TServerImpl
+    {
+    public:
+        TFailingServer(const OPCUA::TServerConfig& config, WBMQTT::PDeviceDriver driver): TServerImpl(config, driver)
+        {}
+
+    protected:
+        void CreateVariableNode(const UA_NodeId& parentNodeId,
+                                const std::string& nodeName,
+                                WBMQTT::PControl control) override
+        {
+            throw std::runtime_error("forced CreateVariableNode failure");
+        }
+    };
+}
+
 class TServerTest: public Testing::TLoggedFixture
 {
 protected:
@@ -45,4 +63,27 @@ TEST_F(TServerTest, control)
     auto server = std::make_unique<OPCUA::TServerImpl>(config.OpcUa, driver);
     server->ControlValueEventCallback(TControlValueEvent(control, std::to_string(0)));
     ASSERT_EQ(control, server->GetControl("test/test"));
+}
+
+TEST_F(TServerTest, control_rollback_on_create_variable_node_failure)
+{
+    TConfig config;
+    LoadConfig(config, testRootDir + "/bad/wb-mqtt-opcua.conf", schemaFile);
+
+    auto mqttBroker = Testing::NewFakeMqttBroker(*this);
+    auto mqttClient = mqttBroker->MakeClient("test");
+    auto backend = NewDriverBackend(mqttClient);
+    auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
+    driver->StartLoop();
+    driver->WaitForReady();
+
+    auto tx = driver->BeginTx();
+    auto device = tx->CreateDevice(TLocalDeviceArgs{}.SetId("test")).GetValue();
+    auto control = device->CreateControl(tx, TControlArgs{}.SetId("test").SetType("value")).GetValue();
+    tx->End();
+
+    auto server = std::make_unique<TFailingServer>(config.OpcUa, driver);
+
+    ASSERT_NO_THROW(server->ControlValueEventCallback(TControlValueEvent(control, std::to_string(0))));
+    ASSERT_EQ(nullptr, server->GetControl("test/test"));
 }
