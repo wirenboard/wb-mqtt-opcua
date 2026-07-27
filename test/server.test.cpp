@@ -87,3 +87,29 @@ TEST_F(TServerTest, control_rollback_on_create_variable_node_failure)
     ASSERT_NO_THROW(server->ControlValueEventCallback(TControlValueEvent(control, std::to_string(0))));
     ASSERT_EQ(nullptr, server->GetControl("test/test"));
 }
+
+TEST_F(TServerTest, browse_path_result_released_for_unmatched_control)
+{
+    TConfig config;
+    LoadConfig(config, testRootDir + "/bad/wb-mqtt-opcua.conf", schemaFile);
+
+    auto mqttBroker = Testing::NewFakeMqttBroker(*this);
+    auto mqttClient = mqttBroker->MakeClient("test");
+    auto backend = NewDriverBackend(mqttClient);
+    auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
+    driver->StartLoop();
+    driver->WaitForReady();
+
+    auto tx = driver->BeginTx();
+    auto device = tx->CreateDevice(TLocalDeviceArgs{}.SetId("test")).GetValue();
+    auto control = device->CreateControl(tx, TControlArgs{}.SetId("unmatched").SetType("value")).GetValue();
+    tx->End();
+
+    auto server = std::make_unique<OPCUA::TServerImpl>(config.OpcUa, driver);
+
+    for (auto i = 0; i < 5; ++i) {
+        server->ControlValueEventCallback(TControlValueEvent(control, std::to_string(i)));
+    }
+
+    ASSERT_EQ(nullptr, server->GetControl("test/unmatched"));
+}
