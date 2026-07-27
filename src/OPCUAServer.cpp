@@ -150,6 +150,22 @@ namespace
         }
     }
 
+    struct TBrowsePathResult
+    {
+        UA_BrowsePathResult Result;
+
+        explicit TBrowsePathResult(UA_BrowsePathResult result): Result(result)
+        {}
+
+        ~TBrowsePathResult()
+        {
+            UA_BrowsePathResult_clear(&Result);
+        }
+
+        TBrowsePathResult(const TBrowsePathResult&) = delete;
+        TBrowsePathResult& operator=(const TBrowsePathResult&) = delete;
+    };
+
 }
 
 namespace OPCUA
@@ -318,19 +334,21 @@ namespace OPCUA
         }
         try {
             auto browseName = UA_QUALIFIEDNAME(1, (char*)it->first.c_str());
-            auto res = UA_Server_browseSimplifiedBrowsePath(Server,
-                                                            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
-                                                            1,
-                                                            &browseName);
-            auto parentNodeId =
-                res.statusCode == UA_STATUSCODE_GOOD ? res.targets[0].targetId.nodeId : CreateObjectNode(it->first);
+            TBrowsePathResult parentBpr(
+                UA_Server_browseSimplifiedBrowsePath(Server,
+                                                     UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                                                     1,
+                                                     &browseName));
+            auto parentNodeId = parentBpr.Result.statusCode == UA_STATUSCODE_GOOD
+                                    ? parentBpr.Result.targets[0].targetId.nodeId
+                                    : CreateObjectNode(it->first);
             for (auto& valueNode: it->second) {
                 if (valueNode.DeviceControlPair != nodeName) {
                     continue;
                 }
                 browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
-                res = UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName);
-                if (res.statusCode != UA_STATUSCODE_GOOD) {
+                TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
+                if (childBpr.Result.statusCode != UA_STATUSCODE_GOOD) {
                     AddControl(nodeName, event.Control);
                     try {
                         CreateVariableNode(parentNodeId, nodeName, event.Control);
