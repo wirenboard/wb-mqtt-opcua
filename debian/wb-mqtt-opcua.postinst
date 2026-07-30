@@ -4,7 +4,7 @@ set -e
 
 CONFFILE=/etc/wb-mqtt-opcua.conf
 
-if [ ! -e $CONFFILE ]; then
+if [ ! -s $CONFFILE ]; then
     cp /usr/share/wb-mqtt-opcua/wb-mqtt-opcua.sample.conf $CONFFILE
 fi
 
