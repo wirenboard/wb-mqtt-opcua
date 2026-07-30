@@ -10,6 +10,7 @@ RestartPreventExitStatus=2 3 4 5 6
 SuccessExitStatus=7
 User=root
 ExecStart=/usr/bin/wb-mqtt-opcua
+ExecStartPre=/bin/sh -c '[ -s /etc/wb-mqtt-opcua.conf ] || cp /usr/share/wb-mqtt-opcua/wb-mqtt-opcua.sample.conf /etc/wb-mqtt-opcua.conf'
 ExecStartPre=/usr/bin/wb-mqtt-opcua -g /etc/wb-mqtt-opcua.conf
 
 [Install]
