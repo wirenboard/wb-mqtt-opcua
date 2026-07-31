@@ -1,3 +1,10 @@
+wb-mqtt-opcua (1.4.3) stable; urgency=medium
+
+  * Fix coverage reporting with GNU make 4.4 (trixie): export coverage
+    variables from debian/rules instead of MAKEFLAGS
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Fri, 31 Jul 2026 09:04:04 +0000
+
 wb-mqtt-opcua (1.4.2) stable; urgency=medium
 
   * Recreate config on package install if the existing file is empty
