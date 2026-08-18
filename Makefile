@@ -40,7 +40,7 @@ else
 endif
 
 TEST_DIR = test
-TEST_SRCS := $(shell find $(TEST_DIR) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
+TEST_SRCS := $(shell find $(TEST_DIR) -name "*.cpp" -and -not -name main.cpp)
 TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
