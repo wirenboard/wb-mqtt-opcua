@@ -22,6 +22,8 @@ namespace
                                                       "pubsub",
                                                       "discovery"};
 
+    static_assert(UA_LOGCATEGORIES == 10, "Update LogCategoryNames for the current open62541 UA_LOGCATEGORIES");
+
     void PrintLogMessage(WBMQTT::TLogger& logger, UA_LogCategory category, const char* msg, va_list args)
     {
         va_list args2;
