@@ -16,7 +16,7 @@ GIT_REVISION:=$(shell git rev-parse HEAD)
 DEB_VERSION:=$(shell head -1 debian/changelog | awk '{ print $$2 }' | sed 's/[\(\)]//g')
 
 TARGET = wb-mqtt-opcua
-SRC_DIRS ?= src
+SRC_DIR = src
 
 ifeq ($(DEBUG),)
 	BUILD_DIR ?= build/release
@@ -26,12 +26,11 @@ else
 	CMAKE_BUILD_TYPE=Debug
 endif
 
-COMMON_SRCS := $(shell find $(SRC_DIRS) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
+COMMON_SRCS := $(shell find $(SRC_DIR) -name "*.cpp" -and -not -name main.cpp)
 COMMON_OBJS := $(COMMON_SRCS:%=$(BUILD_DIR)/%.o)
 
 LDFLAGS = -lwbmqtt1 -lpthread -lopen62541
-CXXFLAGS = -std=c++20 -Wall -Werror -I$(SRC_DIRS) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
-CFLAGS = -Wall -I$(SRC_DIR)
+CXXFLAGS = -std=c++20 -Wall -Werror -I$(SRC_DIR) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
 
 ifeq ($(DEBUG),)
 	CXXFLAGS += -O2
@@ -58,10 +57,7 @@ all:
 	$(MAKE) $(TARGET)
 
 $(TARGET): $(COMMON_OBJS) $(BUILD_DIR)/src/main.cpp.o
-	${CXX} -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
-
-$(BUILD_DIR)/%.c.o: %.c
-	${CC} -c $< -o $@ ${CFLAGS}
+	$(CXX) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 $(BUILD_DIR)/%.cpp.o: %.cpp
 	mkdir -p $(dir $@)
