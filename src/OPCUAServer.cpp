@@ -1,5 +1,6 @@
 #include "OPCUAServer.h"
 
+#include <cstring>
 #include <functional>
 #include <stdexcept>
 #include <vector>
@@ -10,8 +11,18 @@
 
 namespace
 {
-    const char* LogCategoryNames[7] =
-        {"network", "channel", "session", "server", "client", "userland", "securitypolicy"};
+    const char* LogCategoryNames[UA_LOGCATEGORIES] = {"network",
+                                                      "channel",
+                                                      "session",
+                                                      "server",
+                                                      "client",
+                                                      "userland",
+                                                      "securitypolicy",
+                                                      "eventloop",
+                                                      "pubsub",
+                                                      "discovery"};
+
+    static_assert(UA_LOGCATEGORIES == 10, "Update LogCategoryNames for the current open62541 UA_LOGCATEGORIES");
 
     void PrintLogMessage(WBMQTT::TLogger& logger, UA_LogCategory category, const char* msg, va_list args)
     {
@@ -45,7 +56,7 @@ namespace
         }
     }
 
-    void LogClear(void* logContext)
+    void LogClear(UA_Logger* logger)
     {}
 
     UA_StatusCode ReadVariableCallback(UA_Server* sserver,
@@ -74,10 +85,10 @@ namespace
     }
     }
 
-    UA_Logger MakeLogger()
+    UA_Logger* GetLogger()
     {
-        UA_Logger logger = {Log, nullptr, LogClear};
-        return logger;
+        static UA_Logger logger = {Log, nullptr, LogClear};
+        return &logger;
     }
 
     void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
@@ -102,11 +113,29 @@ namespace
         }
     }
 
+    void SetServerUrl(UA_ServerConfig* serverCfg, const std::string& url)
+    {
+        UA_Array_delete(serverCfg->serverUrls, serverCfg->serverUrlsSize, &UA_TYPES[UA_TYPES_STRING]);
+        serverCfg->serverUrls = nullptr;
+        serverCfg->serverUrlsSize = 0;
+
+        auto urls = static_cast<UA_String*>(UA_Array_new(1, &UA_TYPES[UA_TYPES_STRING]));
+        if (!urls) {
+            throw std::runtime_error("OPC UA server URL allocation failed");
+        }
+        urls[0] = UA_String_fromChars(url.c_str());
+        serverCfg->serverUrls = urls;
+        serverCfg->serverUrlsSize = 1;
+    }
+
     void ConfigureOpcUaServer(UA_ServerConfig* serverCfg, const OPCUA::TServerConfig& config)
     {
-        serverCfg->logger = MakeLogger();
+        serverCfg->logging = GetLogger();
 
-        UA_ServerConfig_setBasics(serverCfg);
+        auto res = UA_ServerConfig_setBasics_withPort(serverCfg, static_cast<UA_UInt16>(config.BindPort));
+        if (res != UA_STATUSCODE_GOOD) {
+            throw std::runtime_error(std::string("OPC UA server configuration failed: ") + UA_StatusCode_name(res));
+        }
         serverCfg->allowEmptyVariables = UA_RULEHANDLING_ACCEPT;
 
         UA_BuildInfo_clear(&serverCfg->buildInfo);
@@ -118,14 +147,7 @@ namespace
         serverCfg->applicationDescription.applicationType = UA_APPLICATIONTYPE_SERVER;
 
         if (!config.BindIp.empty()) {
-            UA_String_clear(&serverCfg->customHostname);
-            serverCfg->customHostname = UA_String_fromChars(config.BindIp.c_str());
-        }
-
-        auto res = UA_ServerConfig_addNetworkLayerTCP(serverCfg, config.BindPort, 0, 0);
-        if (res != UA_STATUSCODE_GOOD) {
-            throw std::runtime_error(std::string("OPC UA network layer configuration failed: ") +
-                                     UA_StatusCode_name(res));
+            SetServerUrl(serverCfg, "opc.tcp://" + config.BindIp + ":" + std::to_string(config.BindPort));
         }
 
         res = UA_ServerConfig_addSecurityPolicyNone(serverCfg, nullptr);
@@ -150,6 +172,23 @@ namespace
         }
     }
 
+    UA_Server* MakeOpcUaServer(const OPCUA::TServerConfig& config)
+    {
+        UA_ServerConfig serverCfg;
+        memset(&serverCfg, 0, sizeof(serverCfg));
+        try {
+            ConfigureOpcUaServer(&serverCfg, config);
+        } catch (...) {
+            UA_ServerConfig_clean(&serverCfg);
+            throw;
+        }
+        auto server = UA_Server_newWithConfig(&serverCfg);
+        if (!server) {
+            throw std::runtime_error("OPC UA server initilization failed");
+        }
+        return server;
+    }
+
     struct TBrowsePathResult
     {
         UA_BrowsePathResult Result;
@@ -171,15 +210,11 @@ namespace
 namespace OPCUA
 {
     TServerImpl::TServerImpl(const TServerConfig& config, WBMQTT::PDeviceDriver driver)
-        : Server(UA_Server_new()),
+        : Server(MakeOpcUaServer(config)),
           IsRunning(true),
           Config(config),
           Driver(driver)
     {
-        if (!Server) {
-            throw std::runtime_error("OPC UA server initilization failed");
-        }
-
         Driver->On<WBMQTT::TControlValueEvent>(
             [&](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); });
 
@@ -192,8 +227,7 @@ namespace OPCUA
         Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
         Driver->WaitForReady();
 
-        // Setup and run OPC UA server
-        ConfigureOpcUaServer(UA_Server_getConfig(Server), config);
+        // Run OPC UA server
         ServerThread = std::thread([this]() {
             auto res = UA_Server_run(Server, &IsRunning);
             if (res != UA_STATUSCODE_GOOD) {

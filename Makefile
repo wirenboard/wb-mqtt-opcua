@@ -16,8 +16,7 @@ GIT_REVISION:=$(shell git rev-parse HEAD)
 DEB_VERSION:=$(shell head -1 debian/changelog | awk '{ print $$2 }' | sed 's/[\(\)]//g')
 
 TARGET = wb-mqtt-opcua
-SRC_DIRS ?= src
-LIB62541_DIR = $(shell pwd)/thirdparty/open62541
+SRC_DIR = src
 
 ifeq ($(DEBUG),)
 	BUILD_DIR ?= build/release
@@ -27,18 +26,11 @@ else
 	CMAKE_BUILD_TYPE=Debug
 endif
 
-COMMON_SRCS := $(shell find $(SRC_DIRS) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
+COMMON_SRCS := $(shell find $(SRC_DIR) -name "*.cpp" -and -not -name main.cpp)
 COMMON_OBJS := $(COMMON_SRCS:%=$(BUILD_DIR)/%.o)
 
-LIB62541_BUILD_DIR = $(BUILD_DIR)/thirdparty/open62541
-
-# include/open62541 is created when building in devenv with version suffix
-# because of a strange hack in open62541's CMakeLists.txt
-LIB62541_INCLUDE = -I$(LIB62541_BUILD_DIR)/include -I$(LIB62541_BUILD_DIR)/include/open62541
-
-LDFLAGS = -lwbmqtt1 -lpthread $(LIB62541_BUILD_DIR)/bin/libopen62541.a
-CXXFLAGS = -std=c++20 -Wall -Werror $(LIB62541_INCLUDE) -I$(SRC_DIRS) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
-CFLAGS = -Wall $(LIB62541_INCLUDES) -I$(SRC_DIR)
+LDFLAGS = -lwbmqtt1 -lpthread -lopen62541
+CXXFLAGS = -std=c++20 -Wall -Werror -I$(SRC_DIR) -DWBMQTT_COMMIT="$(GIT_REVISION)" -DWBMQTT_VERSION="$(DEB_VERSION)"
 
 ifeq ($(DEBUG),)
 	CXXFLAGS += -O2
@@ -48,7 +40,7 @@ else
 endif
 
 TEST_DIR = test
-TEST_SRCS := $(shell find $(TEST_DIR) \( -name "*.cpp" -or -name "*.c" \) -and -not -name main.cpp)
+TEST_SRCS := $(shell find $(TEST_DIR) -name "*.cpp" -and -not -name main.cpp)
 TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
 TEST_TARGET = test-app
 TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
@@ -56,19 +48,16 @@ TEST_LDFLAGS = -lgtest -lwbmqtt_test_utils
 VALGRIND_FLAGS = --error-exitcode=180 -q
 
 COV_REPORT ?= $(BUILD_DIR)/cov
-GCOVR_FLAGS := -e $(LIB62541_BUILD_DIR) -s --html $(COV_REPORT).html -x $(COV_REPORT).xml
+GCOVR_FLAGS := -s --html $(COV_REPORT).html -x $(COV_REPORT).xml
 ifneq ($(COV_FAIL_UNDER),)
 	GCOVR_FLAGS += --fail-under-line $(COV_FAIL_UNDER)
 endif
 
-all: open62541_build
+all:
 	$(MAKE) $(TARGET)
 
 $(TARGET): $(COMMON_OBJS) $(BUILD_DIR)/src/main.cpp.o
-	${CXX} -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
-
-$(BUILD_DIR)/%.c.o: %.c
-	${CC} -c $< -o $@ ${CFLAGS}
+	$(CXX) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 $(BUILD_DIR)/%.cpp.o: %.cpp
 	mkdir -p $(dir $@)
@@ -92,23 +81,6 @@ endif
 $(TEST_DIR)/$(TEST_TARGET): $(TEST_OBJS) $(COMMON_OBJS) $(BUILD_DIR)/test/main.cpp.o
 	$(CXX) -o $@ $^ $(LDFLAGS) $(TEST_LDFLAGS) -fno-lto
 
-open62541_build:
-ifeq (n,$(findstring n,$(firstword -$(MAKEFLAGS))))
-	@echo "Skip open62541 building in dry-run mode"
-else
-	mkdir -p $(LIB62541_BUILD_DIR)
-	cd $(LIB62541_BUILD_DIR); \
-	cmake -DCMAKE_INSTALL_PREFIX:PATH="" \
-	      -DCMAKE_BUILD_TYPE:STRING="$(CMAKE_BUILD_TYPE)" \
-	      -DCMAKE_C_COMPILER=$(CC) \
-	      -DCMAKE_CXX_COMPILER=$(CXX) \
-	      -DCMAKE_C_COMPILER_WORKS=1 \
-	      -DCMAKE_CXX_COMPILER_WORKS=1 \
-	      -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=NO \
-	      $(LIB62541_DIR); \
-	$(MAKE) DESTDIR=./ install
-endif
-
 clean:
 	-rm -rf $(BUILD_DIR)
 	-rm -rf $(TEST_DIR)/$(TEST_TARGET)
@@ -119,4 +91,4 @@ install:
 	install -Dm0644 wb-mqtt-opcua.sample.conf -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-opcua
 	install -Dm0644 wb-mqtt-opcua.wbconfigs $(DESTDIR)/etc/wb-configs.d/18wb-mqtt-opcua
 
-.PHONY: all test clean open62541_build
+.PHONY: all test clean
