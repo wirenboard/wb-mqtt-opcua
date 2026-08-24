@@ -1,3 +1,9 @@
+wb-mqtt-opcua (1.5.1) stable; urgency=medium
+
+  * Fix crash on writing a string value from an OPC UA client
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Mon, 24 Aug 2026 18:20:00 +0400
+
 wb-mqtt-opcua (1.5.0) stable; urgency=medium
 
   * Use system-wide open62541

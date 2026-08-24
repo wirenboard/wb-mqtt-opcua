@@ -300,7 +300,13 @@ namespace OPCUA
                     return UA_STATUSCODE_GOOD;
                 }
                 if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_STRING])) {
-                    auto value = (char*)((UA_String*)dataValue->value.data)->data;
+                    // UA_String is not null-terminated, its length must be used explicitly.
+                    // An empty string has data pointing to UA_EMPTY_ARRAY_SENTINEL, not to a buffer.
+                    auto rawValue = (const UA_String*)dataValue->value.data;
+                    std::string value;
+                    if (rawValue->length) {
+                        value.assign((const char*)rawValue->data, rawValue->length);
+                    }
                     ctrl->SetRawValue(tx, value).Sync();
                     LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                     return UA_STATUSCODE_GOOD;
