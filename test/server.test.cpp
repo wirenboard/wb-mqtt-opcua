@@ -158,6 +158,20 @@ TEST_F(TServerTest, write_string_value)
     }
 
     {
+        // Zero-length strings may have a non-null data pointer (e.g. empty/sentinel buffer).
+        char buffer[] = {'X', 'Y', 'Z', '\0'};
+        UA_String rawValue;
+        rawValue.length = 0;
+        rawValue.data = (UA_Byte*)buffer;
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &rawValue, &UA_TYPES[UA_TYPES_STRING]);
+        dataValue.hasValue = true;
+        ASSERT_EQ(UA_STATUSCODE_GOOD, server->WriteVariable(&nodeId, &dataValue));
+        ASSERT_EQ("", control->GetRawValue());
+    }
+
+    {
         UA_String rawValue = UA_STRING_NULL;
 
         UA_DataValue dataValue;
