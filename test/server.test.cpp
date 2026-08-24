@@ -138,7 +138,8 @@ TEST_F(TServerTest, write_string_value)
     server->ControlValueEventCallback(TControlValueEvent(control, "initial"));
     ASSERT_EQ(control, server->GetControl("test/test"));
 
-    auto nodeId = UA_NODEID_STRING(1, (char*)"test/test");
+    char nodeIdStr[] = "test/test";
+    auto nodeId = UA_NODEID_STRING(1, nodeIdStr);
 
     {
         // The bytes after the value are deliberately non-zero, so reading it as a
