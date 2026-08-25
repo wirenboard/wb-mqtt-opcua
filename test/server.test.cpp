@@ -113,3 +113,74 @@ TEST_F(TServerTest, browse_path_result_released_for_unmatched_control)
 
     ASSERT_EQ(nullptr, server->GetControl("test/unmatched"));
 }
+
+TEST_F(TServerTest, write_string_value)
+{
+    TConfig config;
+    LoadConfig(config, testRootDir + "/bad/wb-mqtt-opcua.conf", schemaFile);
+
+    auto mqttBroker = Testing::NewFakeMqttBroker(*this);
+    auto mqttClient = mqttBroker->MakeClient("test");
+    auto backend = NewDriverBackend(mqttClient);
+    auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
+    driver->StartLoop();
+    driver->WaitForReady();
+
+    auto tx = driver->BeginTx();
+    auto device = tx->CreateDevice(TLocalDeviceArgs{}.SetId("test")).GetValue();
+    auto control =
+        device
+            ->CreateControl(tx, TControlArgs{}.SetId("test").SetType("text").SetReadonly(false).SetRawValue("initial"))
+            .GetValue();
+    tx->End();
+
+    auto server = std::make_unique<OPCUA::TServerImpl>(config.OpcUa, driver);
+    server->ControlValueEventCallback(TControlValueEvent(control, "initial"));
+    ASSERT_EQ(control, server->GetControl("test/test"));
+
+    char nodeIdStr[] = "test/test";
+    auto nodeId = UA_NODEID_STRING(1, nodeIdStr);
+
+    {
+        // The bytes after the value are deliberately non-zero, so reading it as a
+        // C string cannot accidentally stop in the right place.
+        char buffer[] = {'O', 'N', 'X', 'Y', 'Z'};
+        UA_String rawValue;
+        rawValue.length = 2;
+        rawValue.data = (UA_Byte*)buffer;
+
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &rawValue, &UA_TYPES[UA_TYPES_STRING]);
+        dataValue.hasValue = true;
+
+        ASSERT_EQ(UA_STATUSCODE_GOOD, server->WriteVariable(&nodeId, &dataValue));
+        ASSERT_EQ("ON", control->GetRawValue());
+    }
+
+    {
+        // Zero-length strings may have a non-null data pointer (e.g. empty/sentinel buffer).
+        char buffer[] = {'X', 'Y', 'Z', '\0'};
+        UA_String rawValue;
+        rawValue.length = 0;
+        rawValue.data = (UA_Byte*)buffer;
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &rawValue, &UA_TYPES[UA_TYPES_STRING]);
+        dataValue.hasValue = true;
+        ASSERT_EQ(UA_STATUSCODE_GOOD, server->WriteVariable(&nodeId, &dataValue));
+        ASSERT_EQ("", control->GetRawValue());
+    }
+
+    {
+        UA_String rawValue = UA_STRING_NULL;
+
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &rawValue, &UA_TYPES[UA_TYPES_STRING]);
+        dataValue.hasValue = true;
+
+        ASSERT_EQ(UA_STATUSCODE_GOOD, server->WriteVariable(&nodeId, &dataValue));
+        ASSERT_EQ("", control->GetRawValue());
+    }
+}
