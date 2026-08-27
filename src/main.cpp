@@ -111,6 +111,9 @@ namespace
                 case 'g':
                     try {
                         UpdateConfig(optarg, CONFIG_JSON_SCHEMA_FULL_FILE_PATH);
+                    } catch (const TConfigException& e) {
+                        std::cerr << "FATAL: " << e.what();
+                        exit(EXIT_NOTCONFIGURED);
                     } catch (const exception& e) {
                         std::cerr << "FATAL: " << e.what();
                         exit(1);
@@ -183,10 +186,16 @@ int main(int argc, char* argv[])
 
         auto OpcuaServer(OPCUA::MakeServer(config.OpcUa, driver));
 
+        SignalHandling::OnSignals({SIGINT, SIGTERM}, [&] {
+            OpcuaServer.reset();
+            driver->StopLoop();
+            driver->Close();
+        });
+
         initialized.Complete();
         SignalHandling::Wait();
     } catch (const TEmptyConfigException&) {
-        LOG(Error) << "All groups are disabled, stopping service gracefully";
+        LOG(Info) << "All groups are disabled, stopping service gracefully";
         return EXIT_NOTRUNNING;
     } catch (const TConfigException& e) {
         LOG(Error) << "FATAL: " << e.what();
@@ -196,5 +205,5 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    return EXIT_SUCCESS;
+    return EXIT_NOTRUNNING;
 }

@@ -157,8 +157,13 @@ void LoadConfig(TConfig& cfg, const std::string& configFileName, const std::stri
 
 void UpdateConfig(const string& configFileName, const string& configSchemaFileName)
 {
-    auto config = JSON::Parse(configFileName);
-    JSON::Validate(config, JSON::Parse(configSchemaFileName));
+    Json::Value config;
+    try {
+        config = JSON::Parse(configFileName);
+        JSON::Validate(config, JSON::Parse(configSchemaFileName));
+    } catch (const std::exception& e) {
+        throw TConfigException(e.what());
+    }
 
     bool update_groups = false;
     Get(config, "update_groups", update_groups);
