@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <string>
@@ -70,7 +71,7 @@ namespace OPCUA
         std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
 
         UA_Server* Server;
-        volatile UA_Boolean IsRunning;
+        std::atomic<bool> IsRunning;
         std::thread ServerThread;
 
         const TServerConfig& Config;

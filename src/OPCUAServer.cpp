@@ -229,7 +229,15 @@ namespace OPCUA
 
         // Run OPC UA server
         ServerThread = std::thread([this]() {
-            auto res = UA_Server_run(Server, &IsRunning);
+            auto res = UA_Server_run_startup(Server);
+            if (res != UA_STATUSCODE_GOOD) {
+                LOG(Error) << UA_StatusCode_name(res);
+                exit(1);
+            }
+            while (IsRunning.load()) {
+                UA_Server_run_iterate(Server, true);
+            }
+            res = UA_Server_run_shutdown(Server);
             if (res != UA_STATUSCODE_GOOD) {
                 LOG(Error) << UA_StatusCode_name(res);
                 exit(1);
@@ -239,11 +247,9 @@ namespace OPCUA
 
     TServerImpl::~TServerImpl()
     {
-        if (IsRunning) {
-            IsRunning = false;
-            if (ServerThread.joinable()) {
-                ServerThread.join();
-            }
+        IsRunning.store(false);
+        if (ServerThread.joinable()) {
+            ServerThread.join();
         }
         if (Server) {
             UA_Server_delete(Server);
