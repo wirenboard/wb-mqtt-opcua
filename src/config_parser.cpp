@@ -214,9 +214,9 @@ void UpdateConfig(PDeviceDriver driver, Json::Value& oldConfig)
                     if (mqttControl != mqttDevice->second.end()) {
                         mqttDevice->second.erase(mqttControl);
                     }
-                }
-                if (!mqttDevice->second.size()) {
-                    mqttDevices.erase(mqttDevice);
+                    if (mqttDevice->second.empty()) {
+                        mqttDevices.erase(mqttDevice);
+                    }
                 }
             }
         }
