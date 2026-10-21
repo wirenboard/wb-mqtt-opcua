@@ -50,7 +50,18 @@ It's designed to be used on [Wiren Board](https://wirenboard.com/en) family of p
 
     // Пароль при подключении к шлюзу.
     // Обязателен, если "auth": true, иначе сервис не запустится.
-    "password": ""
+    "password": "",
+
+    // Шифрование соединений:
+    //   "none" - только без шифрования;
+    //   "optional" - без шифрования и с шифрованием, без шифрования шифруется только пароль;
+    //   "required" - только с шифрованием.
+    // При первом запуске с шифрованием создаётся самоподписанный сертификат сервера
+    // /var/lib/wb-mqtt-opcua/server_cert.der и ключ /var/lib/wb-mqtt-opcua/server_key.der.
+    // Их можно заменить своими (DER или PEM), URI в subjectAltName сертификата
+    // должен быть urn:wb-mqtt-opcua.server.application.
+    // По умолчанию, "none".
+    "security": "none"
   },
 
   // Настройки подключения к MQTT брокеру.

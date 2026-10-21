@@ -1,6 +1,7 @@
 wb-mqtt-opcua (1.6.0) stable; urgency=medium
 
   * Add user authentication
+  * Add encryption support (Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss)
 
  -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Tue, 20 Oct 2026 18:00:00 +0400
 

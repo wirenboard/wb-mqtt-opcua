@@ -184,6 +184,17 @@
                     "title": "Password",
                     "_format": "password",
                     "propertyOrder": 5
+                },
+                "security": {
+                    "type": "string",
+                    "title": "Encryption",
+                    "description": "security_description",
+                    "enum": ["none", "optional", "required"],
+                    "options": {
+                        "enum_titles": ["Disabled", "Allowed", "Required"]
+                    },
+                    "default": "none",
+                    "propertyOrder": 6
                 }
             },
             "propertyOrder": 4,
@@ -219,7 +230,8 @@
             "update_groups_description": "This flag will be cleared on next start of daemon",
             "opcua_description": "Configure topics to fields mapping and daemon configuration",
             "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
-            "control_info_title": "Type (for information only)"
+            "control_info_title": "Type (for information only)",
+            "security_description": "Allowed: unencrypted and encrypted connections, on unencrypted ones only the password is encrypted. Required: encrypted connections only"
         },
         "ru": {
             "Update groups list": "Обновить список групп",
@@ -246,7 +258,12 @@
             "TCP port": "Порт",
             "TCP port number to bind gateway to": "Номер TCP-порта для шлюза OPC UA",
             "Groups of controls": "Группы элементов управления",
-            "Broker address": "Адрес брокера"
+            "Broker address": "Адрес брокера",
+            "Encryption": "Шифрование",
+            "Disabled": "Отключено",
+            "Allowed": "Разрешено",
+            "Required": "Обязательно",
+            "security_description": "Разрешено: подключения без шифрования и с шифрованием, без шифрования шифруется только пароль. Обязательно: только подключения с шифрованием"
         }
     }
 }

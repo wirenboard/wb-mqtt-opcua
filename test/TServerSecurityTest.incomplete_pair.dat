@@ -1,0 +1,2 @@
+Subscribe: /devices/+/meta/driver (QoS 0)
+stop: test

@@ -146,7 +146,17 @@ namespace
                 if (cfg.User.empty()) {
                     throw std::runtime_error("OPC UA username must be set if authentication is enabled");
                 }
+                if (cfg.Password.empty()) {
+                    throw std::runtime_error("OPC UA password must be set if authentication is enabled");
+                }
             }
+            const std::map<std::string, OPCUA::TSecurityMode> securityModes = {
+                {"none", OPCUA::TSecurityMode::None},
+                {"optional", OPCUA::TSecurityMode::Optional},
+                {"required", OPCUA::TSecurityMode::Required}};
+            std::string security = "none";
+            Get(configRoot["opcua"], "security", security);
+            cfg.SecurityMode = securityModes.at(security); // the value is checked by the schema
         }
     }
 }
