@@ -231,7 +231,7 @@
             "opcua_description": "Configure topics to fields mapping and daemon configuration",
             "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
             "control_info_title": "Type (for information only)",
-            "security_description": "Allowed: unencrypted and encrypted connections, on unencrypted ones only the password is encrypted. Required: encrypted connections only"
+            "security_description": "<b>Disabled</b>: data and password are sent in plain text.<br><b>Allowed</b>: the client chooses an encrypted or unencrypted connection; on an unencrypted one the password is still protected, but data is not.<br><b>Required</b>: encrypted connections only; the client must support encryption and trust the server certificate."
         },
         "ru": {
             "Update groups list": "Обновить список групп",
@@ -263,7 +263,7 @@
             "Disabled": "Отключено",
             "Allowed": "Разрешено",
             "Required": "Обязательно",
-            "security_description": "Разрешено: подключения без шифрования и с шифрованием, без шифрования шифруется только пароль. Обязательно: только подключения с шифрованием"
+            "security_description": "<b>Отключено</b>: данные и пароль передаются открытым текстом.<br><b>Разрешено</b>: клиент сам выбирает подключение с шифрованием или без; без шифрования пароль всё равно защищён, а данные — нет.<br><b>Обязательно</b>: только подключения с шифрованием; клиент должен поддерживать шифрование и доверять сертификату сервера."
         }
     }
 }
