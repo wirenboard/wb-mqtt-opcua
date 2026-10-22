@@ -25,6 +25,14 @@ namespace OPCUA
     //! map with object nodes name as keys
     typedef std::map<std::string, TVariableNodesConfig> TObjectNodesConfig;
 
+    //! Message security of OPC UA endpoints
+    enum class TSecurityMode
+    {
+        None,     //! Unencrypted endpoint only
+        Optional, //! Unencrypted and encrypted endpoints
+        Required  //! Encrypted endpoints only
+    };
+
     //! OPC UA server configuration parameters
     struct TServerConfig
     {
@@ -33,6 +41,18 @@ namespace OPCUA
 
         //! Port to listen
         uint32_t BindPort = 4840;
+
+        //! Authentication. If disabled, anonymous access is allowed
+        bool Auth = false;
+        std::string User = "";
+        std::string Password = "";
+
+        TSecurityMode SecurityMode = TSecurityMode::None;
+
+        //! Server certificate and private key (DER or PEM) in the same directory.
+        //! Self-signed ones are created if both are missing
+        std::string CertificateFile = "/var/lib/wb-mqtt-opcua/server_cert.der";
+        std::string PrivateKeyFile = "/var/lib/wb-mqtt-opcua/server_key.der";
 
         TObjectNodesConfig ObjectNodes;
     };

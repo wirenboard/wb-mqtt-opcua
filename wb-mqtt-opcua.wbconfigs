@@ -1,1 +1,2 @@
 wb_move /etc/wb-mqtt-opcua.conf
+wb_move /var/lib/wb-mqtt-opcua

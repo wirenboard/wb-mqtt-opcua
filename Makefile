@@ -90,5 +90,6 @@ install:
 	install -Dm0644 wb-mqtt-opcua.schema.json -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-confed/schemas
 	install -Dm0644 wb-mqtt-opcua.sample.conf -t $(DESTDIR)$(PREFIX)/share/wb-mqtt-opcua
 	install -Dm0644 wb-mqtt-opcua.wbconfigs $(DESTDIR)/etc/wb-configs.d/18wb-mqtt-opcua
+	install -dm0700 $(DESTDIR)/var/lib/wb-mqtt-opcua
 
 .PHONY: all test clean

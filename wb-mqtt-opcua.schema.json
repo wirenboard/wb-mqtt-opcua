@@ -123,7 +123,7 @@
                 },
                 "auth": {
                     "type": "boolean",
-                    "title": "Enable username+password authentification",
+                    "title": "Enable username+password authentication",
                     "default": false,
                     "_format": "checkbox",
                     "propertyOrder": 4
@@ -150,6 +150,7 @@
         "opcua": {
             "type": "object",
             "title": "OPC UA binding",
+            "defaultProperties": ["host", "port"],
             "properties": {
                 "host": {
                     "type": "string",
@@ -160,18 +161,46 @@
                 "port": {
                     "type": "integer",
                     "title": "TCP port",
-                    "description": "TCP port number to bing gateway to",
+                    "description": "TCP port number to bind gateway to",
                     "default": 4840,
                     "minimum": 1,
                     "maximum": 65535,
                     "propertyOrder": 2
+                },
+                "auth": {
+                    "type": "boolean",
+                    "title": "Enable username+password authentication",
+                    "default": false,
+                    "_format": "checkbox",
+                    "propertyOrder": 3
+                },
+                "username": {
+                    "type": "string",
+                    "title": "Login",
+                    "propertyOrder": 4
+                },
+                "password": {
+                    "type": "string",
+                    "title": "Password",
+                    "_format": "password",
+                    "propertyOrder": 5
+                },
+                "security": {
+                    "type": "string",
+                    "title": "Encryption",
+                    "description": "security_description",
+                    "enum": ["none", "optional", "required"],
+                    "options": {
+                        "enum_titles": ["Disabled", "Allowed", "Required"]
+                    },
+                    "default": "none",
+                    "propertyOrder": 6
                 }
             },
             "propertyOrder": 4,
             "options": {
                 "disable_edit_json": true,
-                "disable_collapse": true,
-                "disable_properties": true
+                "disable_collapse": true
             }
         },
         "groups": {
@@ -201,7 +230,8 @@
             "update_groups_description": "This flag will be cleared on next start of daemon",
             "opcua_description": "Configure topics to fields mapping and daemon configuration",
             "bind_address_description": "Local IP address to bind gateway to. If empty, gateway will listen to all local IP addresses",
-            "control_info_title": "Type (for information only)"
+            "control_info_title": "Type (for information only)",
+            "security_description": "<b>Disabled</b>: data and password are sent in plain text.<br><b>Allowed</b>: the client chooses an encrypted or unencrypted connection; on an unencrypted one the password is still protected, but data is not.<br><b>Required</b>: encrypted connections only; the client must support encryption and trust the server certificate."
         },
         "ru": {
             "Update groups list": "Обновить список групп",
@@ -219,16 +249,21 @@
             "MQTT connection": "Настройки соединения MQTT",
             "Port": "Порт",
             "Keep-alive interval": "Интервал проверки соединения",
-            "Enable username+password authentification": "Включить аутентификацию по логину и паролю",
+            "Enable username+password authentication": "Включить аутентификацию по логину и паролю",
             "Login": "Логин",
             "Password": "Пароль",
             "OPC UA binding": "Настройки связи OPC UA",
             "Bind address": "IP-адрес",
             "bind_address_description": "Локальный IP-адрес для шлюза OPC UA. Пустое поле означает привязку ко всем локальным IP-адресам",
             "TCP port": "Порт",
-            "TCP port number to bing gateway to": "Номер TCP-порта для шлюза OPC UA",
+            "TCP port number to bind gateway to": "Номер TCP-порта для шлюза OPC UA",
             "Groups of controls": "Группы элементов управления",
-            "Broker address": "Адрес брокера"
+            "Broker address": "Адрес брокера",
+            "Encryption": "Шифрование",
+            "Disabled": "Отключено",
+            "Allowed": "Разрешено",
+            "Required": "Обязательно",
+            "security_description": "<b>Отключено</b>: данные и пароль передаются открытым текстом.<br><b>Разрешено</b>: клиент сам выбирает подключение с шифрованием или без; без шифрования пароль всё равно защищён, а данные — нет.<br><b>Обязательно</b>: только подключения с шифрованием; клиент должен поддерживать шифрование и доверять сертификату сервера."
         }
     }
 }
