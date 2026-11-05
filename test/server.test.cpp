@@ -2,6 +2,7 @@
 #include "config_parser.h"
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include <wblib/json_utils.h>
 #include <wblib/testing/fake_driver.h>
@@ -183,4 +184,75 @@ TEST_F(TServerTest, write_string_value)
         ASSERT_EQ(UA_STATUSCODE_GOOD, server->WriteVariable(&nodeId, &dataValue));
         ASSERT_EQ("", control->GetRawValue());
     }
+}
+
+// Writes of values out of the control's min and max are rejected
+TEST_F(TServerTest, value_limits)
+{
+    TConfig config;
+    LoadConfig(config, testRootDir + "/bad/wb-mqtt-opcua.conf", schemaFile);
+
+    auto mqttBroker = Testing::NewFakeMqttBroker(*this);
+    auto mqttClient = mqttBroker->MakeClient("test");
+    auto backend = NewDriverBackend(mqttClient);
+    auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
+    driver->StartLoop();
+    driver->WaitForReady();
+
+    auto tx = driver->BeginTx();
+    auto device = tx->CreateDevice(TLocalDeviceArgs{}.SetId("test")).GetValue();
+    auto control =
+        device->CreateControl(tx, TControlArgs{}.SetId("test").SetType("range").SetReadonly(false).SetRawValue("0"))
+            .GetValue();
+    tx->End();
+
+    auto server = std::make_unique<OPCUA::TServerImpl>(config.OpcUa, driver);
+    server->ControlValueEventCallback(TControlValueEvent(control, "0"));
+
+    char nodeIdStr[] = "test/test";
+    auto nodeId = UA_NODEID_STRING(1, nodeIdStr);
+    auto writeDouble = [&](double value) {
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
+        dataValue.hasValue = true;
+        return server->WriteVariable(&nodeId, &dataValue);
+    };
+    auto writeString = [&](std::string value) {
+        UA_String rawValue = {value.size(), (UA_Byte*)value.data()};
+        UA_DataValue dataValue;
+        UA_DataValue_init(&dataValue);
+        UA_Variant_setScalar(&dataValue.value, &rawValue, &UA_TYPES[UA_TYPES_STRING]);
+        dataValue.hasValue = true;
+        return server->WriteVariable(&nodeId, &dataValue);
+    };
+
+    // No limits
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(1000));
+    ASSERT_EQ("1000", control->GetRawValue());
+
+    // wblib sets limits from /meta/min and /meta/max topics
+    control->SetSingleMeta("min", "0");
+    control->SetSingleMeta("max", "100");
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(0));
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(100));
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(50));
+    ASSERT_EQ("50", control->GetRawValue());
+    ASSERT_EQ(UA_STATUSCODE_BADOUTOFRANGE, writeDouble(150));
+    ASSERT_EQ(UA_STATUSCODE_BADOUTOFRANGE, writeDouble(-1));
+    ASSERT_EQ(UA_STATUSCODE_BADOUTOFRANGE, writeDouble(std::numeric_limits<double>::quiet_NaN()));
+    ASSERT_EQ(UA_STATUSCODE_BADTYPEMISMATCH, writeString("50"));
+    ASSERT_EQ(UA_STATUSCODE_BADTYPEMISMATCH, writeString("150"));
+    ASSERT_EQ("50", control->GetRawValue());
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(70));
+    ASSERT_EQ("70", control->GetRawValue());
+
+    // Only max is left
+    control->SetSingleMeta("min", "");
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(-5));
+    ASSERT_EQ(UA_STATUSCODE_BADOUTOFRANGE, writeDouble(150));
+
+    control->SetSingleMeta("max", "");
+    ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(150));
+    ASSERT_EQ("150", control->GetRawValue());
 }

@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -122,13 +123,9 @@ namespace
             auto v = control->GetValue();
             if (v.Is<bool>()) {
                 attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
-                return;
-            }
-            if (v.Is<double>()) {
+            } else if (v.Is<double>()) {
                 attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
-                return;
             }
-            return;
         } catch (...) {
         }
     }
@@ -627,14 +624,29 @@ namespace OPCUA
         auto tx = Driver->BeginTx();
         try {
             if (dataValue->hasValue) {
+                auto isDouble = UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE]);
+                std::optional<double> min, max;
+                if (ctrl->GetType() == "range") {
+                    min = ctrl->GetMin();
+                    max = ctrl->GetMax();
+                }
+                if ((min || max) && !isDouble) {
+                    LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. Value is not a double";
+                    return UA_STATUSCODE_BADTYPEMISMATCH;
+                }
                 if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_BOOLEAN])) {
                     auto value = *(UA_Boolean*)dataValue->value.data;
                     ctrl->SetValue(tx, value).Sync();
                     LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                     return UA_STATUSCODE_GOOD;
                 }
-                if (UA_Variant_hasScalarType(&dataValue->value, &UA_TYPES[UA_TYPES_DOUBLE])) {
+                if (isDouble) {
                     auto value = *(UA_Double*)dataValue->value.data;
+                    if ((min && !(value >= *min)) || (max && !(value <= *max))) {
+                        LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. Value " << value
+                                   << " is out of range";
+                        return UA_STATUSCODE_BADOUTOFRANGE;
+                    }
                     ctrl->SetValue(tx, value).Sync();
                     LOG(Info) << "Variable node '" + nodeIdName + "' = " << value;
                     return UA_STATUSCODE_GOOD;
@@ -680,15 +692,13 @@ namespace OPCUA
             if (v.Is<bool>()) {
                 auto value = v.As<bool>();
                 UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_BOOLEAN]);
+            } else if (v.Is<double>()) {
+                auto value = v.As<double>();
+                UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
             } else {
-                if (v.Is<double>()) {
-                    auto value = v.As<double>();
-                    UA_Variant_setScalarCopy(&dataValue->value, &value, &UA_TYPES[UA_TYPES_DOUBLE]);
-                } else {
-                    UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
-                    UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
-                    UA_String_clear(&stringValue);
-                }
+                UA_String stringValue = UA_String_fromChars((char*)v.As<std::string>().c_str());
+                UA_Variant_setScalarCopy(&dataValue->value, &stringValue, &UA_TYPES[UA_TYPES_STRING]);
+                UA_String_clear(&stringValue);
             }
             dataValue->hasValue = true;
         } catch (const std::exception& e) {
