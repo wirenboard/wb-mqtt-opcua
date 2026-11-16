@@ -83,6 +83,7 @@ namespace OPCUA
         UA_StatusCode ReadVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue);
 
         void ControlValueEventCallback(const WBMQTT::TControlValueEvent& event);
+        void ControlMetaEventCallback(const WBMQTT::TNewExternalDeviceControlMetaEvent& event);
 
     private:
         std::mutex Mutex;
@@ -97,6 +98,7 @@ namespace OPCUA
         std::vector<WBMQTT::PDriverEventHandlerHandle> EventHandlers;
 
         void RemoveEventHandlers();
+        void UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control);
 
     protected:
         virtual UA_NodeId CreateObjectNode(const std::string& nodeName);

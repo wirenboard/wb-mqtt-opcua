@@ -133,6 +133,21 @@ namespace
         return UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
     }
 
+    const char* GetDataTypeName(const UA_NodeId& dataType)
+    {
+        if (dataType.namespaceIndex == 0 && dataType.identifierType == UA_NODEIDTYPE_NUMERIC) {
+            switch (dataType.identifier.numeric) {
+                case UA_NS0ID_BOOLEAN:
+                    return "Boolean";
+                case UA_NS0ID_DOUBLE:
+                    return "Double";
+                case UA_NS0ID_BASEDATATYPE:
+                    return "BaseDataType";
+            }
+        }
+        return "unknown";
+    }
+
     void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
     {
         attr.accessLevel = GetAccessLevel(control);
@@ -566,6 +581,8 @@ namespace OPCUA
         try {
             EventHandlers.push_back(Driver->On<WBMQTT::TControlValueEvent>(
                 [this](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); }));
+            EventHandlers.push_back(Driver->On<WBMQTT::TNewExternalDeviceControlMetaEvent>(
+                [this](const WBMQTT::TNewExternalDeviceControlMetaEvent& event) { ControlMetaEventCallback(event); }));
 
             // Load external controls
             std::vector<std::string> deviceIds;
@@ -695,7 +712,7 @@ namespace OPCUA
         std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
         auto ctrl = GetControl(nodeIdName);
         if (!ctrl) {
-            LOG(Error) << "Control is not found '" + nodeIdName + "'";
+            LOG(Debug) << "Control is not found '" + nodeIdName + "'";
             dataValue->hasStatus = true;
             dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
             return UA_STATUSCODE_GOOD;
@@ -738,7 +755,11 @@ namespace OPCUA
             return;
         }
         std::string nodeName = it->first + "/" + event.Control->GetId();
-        if (GetControl(nodeName)) {
+        if (GetControl(nodeName) == event.Control) {
+            return;
+        }
+        auto isConfigured = [&](const auto& valueNode) { return valueNode.DeviceControlPair == nodeName; };
+        if (std::none_of(it->second.begin(), it->second.end(), isConfigured)) {
             return;
         }
         try {
@@ -751,16 +772,14 @@ namespace OPCUA
             auto parentNodeId = parentBpr.Result.statusCode == UA_STATUSCODE_GOOD
                                     ? parentBpr.Result.targets[0].targetId.nodeId
                                     : CreateObjectNode(it->first);
-            auto isConfigured = [&](const auto& valueNode) { return valueNode.DeviceControlPair == nodeName; };
-            if (std::none_of(it->second.begin(), it->second.end(), isConfigured)) {
-                return;
-            }
             browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
             TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
+            AddControl(nodeName, event.Control);
             if (childBpr.Result.statusCode == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Control '" << nodeName << "' is published again, variable node is bound to it";
+                UpdateVariableAttributes(nodeName, event.Control);
                 return;
             }
-            AddControl(nodeName, event.Control);
             try {
                 CreateVariableNode(parentNodeId, nodeName, event.Control);
             } catch (...) {
@@ -769,6 +788,58 @@ namespace OPCUA
             }
         } catch (const std::exception& e) {
             LOG(Error) << "Failed to add control '" << nodeName << "': " << e.what();
+        }
+    }
+
+    void TServerImpl::ControlMetaEventCallback(const WBMQTT::TNewExternalDeviceControlMetaEvent& event)
+    {
+        auto device = event.Control->GetDevice();
+        std::string nodeName = device->GetId() + "/" + event.Control->GetId();
+        if (GetControl(nodeName) != event.Control) {
+            return;
+        }
+        if (device->GetControl(event.Control->GetId()) != event.Control) {
+            RemoveControl(nodeName);
+            LOG(Warn) << "Control '" << nodeName << "' is removed from MQTT";
+            return;
+        }
+        if (event.Type == "readonly" || (event.Type == "type" && !event.Value.empty())) {
+            UpdateVariableAttributes(nodeName, event.Control);
+        }
+    }
+
+    void TServerImpl::UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control)
+    {
+        auto nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
+
+        UA_Byte accessLevel = 0;
+        auto res = UA_Server_readAccessLevel(Server, nodeId, &accessLevel);
+        auto newAccessLevel = GetAccessLevel(control);
+        if (res == UA_STATUSCODE_GOOD && accessLevel != newAccessLevel) {
+            res = UA_Server_writeAccessLevel(Server, nodeId, newAccessLevel);
+            if (res == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Variable node '" << nodeName << "' is "
+                          << (control->IsReadonly() ? "read only" : "writable") << " now";
+            }
+        }
+        if (res != UA_STATUSCODE_GOOD) {
+            LOG(Error) << "Variable node '" << nodeName << "' access level update failed: " << UA_StatusCode_name(res);
+        }
+
+        UA_NodeId dataType;
+        UA_NodeId_init(&dataType);
+        res = UA_Server_readDataType(Server, nodeId, &dataType);
+        auto newDataType = GetDataType(control);
+        if (res == UA_STATUSCODE_GOOD && !UA_NodeId_equal(&dataType, &newDataType)) {
+            res = UA_Server_writeDataType(Server, nodeId, newDataType);
+            if (res == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Variable node '" << nodeName << "' data type is " << GetDataTypeName(newDataType)
+                          << " now";
+            }
+        }
+        UA_NodeId_clear(&dataType);
+        if (res != UA_STATUSCODE_GOOD) {
+            LOG(Error) << "Variable node '" << nodeName << "' data type update failed: " << UA_StatusCode_name(res);
         }
     }
 
