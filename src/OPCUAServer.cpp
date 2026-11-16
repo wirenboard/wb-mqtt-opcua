@@ -1,5 +1,6 @@
 #include "OPCUAServer.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstring>
@@ -112,22 +113,32 @@ namespace
         return &logger;
     }
 
-    void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
+    UA_Byte GetAccessLevel(const WBMQTT::PControl& control)
     {
-        attr.accessLevel =
-            control->IsReadonly() ? UA_ACCESSLEVELMASK_READ : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
-        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)control->GetId().c_str());
-        attr.valueRank = UA_VALUERANK_SCALAR;
-        attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
+        return control->IsReadonly() ? UA_ACCESSLEVELMASK_READ : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+    }
+
+    UA_NodeId GetDataType(const WBMQTT::PControl& control)
+    {
         try {
             auto v = control->GetValue();
             if (v.Is<bool>()) {
-                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
-            } else if (v.Is<double>()) {
-                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
+                return UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
+            }
+            if (v.Is<double>()) {
+                return UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
             }
         } catch (...) {
         }
+        return UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
+    }
+
+    void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
+    {
+        attr.accessLevel = GetAccessLevel(control);
+        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)control->GetId().c_str());
+        attr.valueRank = UA_VALUERANK_SCALAR;
+        attr.dataType = GetDataType(control);
     }
 
     void SetServerUrl(UA_ServerConfig* serverCfg, const std::string& url)
@@ -587,12 +598,6 @@ namespace OPCUA
         }
     }
 
-    bool TServerImpl::ControlExists(const std::string& nodeName)
-    {
-        std::unique_lock<std::mutex> lock(Mutex);
-        return ControlMap.find(nodeName) != ControlMap.end();
-    }
-
     void TServerImpl::AddControl(const std::string& nodeName, WBMQTT::PControl control)
     {
         std::unique_lock<std::mutex> lock(Mutex);
@@ -719,7 +724,7 @@ namespace OPCUA
             return;
         }
         std::string nodeName = it->first + "/" + event.Control->GetId();
-        if (ControlExists(nodeName)) {
+        if (GetControl(nodeName)) {
             return;
         }
         try {
@@ -732,22 +737,21 @@ namespace OPCUA
             auto parentNodeId = parentBpr.Result.statusCode == UA_STATUSCODE_GOOD
                                     ? parentBpr.Result.targets[0].targetId.nodeId
                                     : CreateObjectNode(it->first);
-            for (auto& valueNode: it->second) {
-                if (valueNode.DeviceControlPair != nodeName) {
-                    continue;
-                }
-                browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
-                TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
-                if (childBpr.Result.statusCode != UA_STATUSCODE_GOOD) {
-                    AddControl(nodeName, event.Control);
-                    try {
-                        CreateVariableNode(parentNodeId, nodeName, event.Control);
-                    } catch (...) {
-                        RemoveControl(nodeName);
-                        throw;
-                    }
-                    break;
-                }
+            auto isConfigured = [&](const auto& valueNode) { return valueNode.DeviceControlPair == nodeName; };
+            if (std::none_of(it->second.begin(), it->second.end(), isConfigured)) {
+                return;
+            }
+            browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
+            TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
+            if (childBpr.Result.statusCode == UA_STATUSCODE_GOOD) {
+                return;
+            }
+            AddControl(nodeName, event.Control);
+            try {
+                CreateVariableNode(parentNodeId, nodeName, event.Control);
+            } catch (...) {
+                RemoveControl(nodeName);
+                throw;
             }
         } catch (const std::exception& e) {
             LOG(Error) << "Failed to add control '" << nodeName << "': " << e.what();

@@ -75,7 +75,6 @@ namespace OPCUA
         TServerImpl(const TServerConfig& config, WBMQTT::PDeviceDriver driver);
         ~TServerImpl();
 
-        bool ControlExists(const std::string& nodeName);
         void AddControl(const std::string& nodeName, WBMQTT::PControl control);
         void RemoveControl(const std::string& nodeName);
         WBMQTT::PControl GetControl(const std::string& nodeName);
