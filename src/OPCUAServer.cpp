@@ -563,30 +563,36 @@ namespace OPCUA
           Config(config),
           Driver(driver)
     {
-        Driver->On<WBMQTT::TControlValueEvent>(
-            [&](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); });
+        try {
+            EventHandlers.push_back(Driver->On<WBMQTT::TControlValueEvent>(
+                [this](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); }));
 
-        // Load external controls
-        std::vector<std::string> deviceIds;
-        for (const auto& device: config.ObjectNodes) {
-            LOG(Debug) << "'" << device.first << "' is added to filter";
-            deviceIds.emplace_back(device.first);
-        }
-        Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
-        Driver->WaitForReady();
-
-        // Run OPC UA server
-        ServerThread = std::thread([this]() {
-            auto res = UA_Server_run(Server, &IsRunning);
-            if (res != UA_STATUSCODE_GOOD) {
-                LOG(Error) << UA_StatusCode_name(res);
-                exit(1);
+            // Load external controls
+            std::vector<std::string> deviceIds;
+            for (const auto& device: config.ObjectNodes) {
+                LOG(Debug) << "'" << device.first << "' is added to filter";
+                deviceIds.emplace_back(device.first);
             }
-        });
+            Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
+            Driver->WaitForReady();
+
+            // Run OPC UA server
+            ServerThread = std::thread([this]() {
+                auto res = UA_Server_run(Server, &IsRunning);
+                if (res != UA_STATUSCODE_GOOD) {
+                    LOG(Error) << UA_StatusCode_name(res);
+                    exit(1);
+                }
+            });
+        } catch (...) {
+            RemoveEventHandlers();
+            throw;
+        }
     }
 
     TServerImpl::~TServerImpl()
     {
+        RemoveEventHandlers();
         if (IsRunning) {
             IsRunning = false;
             if (ServerThread.joinable()) {
@@ -596,6 +602,14 @@ namespace OPCUA
         if (Server) {
             UA_Server_delete(Server);
         }
+    }
+
+    void TServerImpl::RemoveEventHandlers()
+    {
+        for (const auto& handle: EventHandlers) {
+            Driver->RemoveEventHandler(handle);
+        }
+        EventHandlers.clear();
     }
 
     void TServerImpl::AddControl(const std::string& nodeName, WBMQTT::PControl control)

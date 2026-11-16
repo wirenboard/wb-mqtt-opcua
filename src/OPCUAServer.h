@@ -94,6 +94,9 @@ namespace OPCUA
 
         const TServerConfig& Config;
         WBMQTT::PDeviceDriver Driver;
+        std::vector<WBMQTT::PDriverEventHandlerHandle> EventHandlers;
+
+        void RemoveEventHandlers();
 
     protected:
         virtual UA_NodeId CreateObjectNode(const std::string& nodeName);

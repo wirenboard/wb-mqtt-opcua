@@ -1,8 +1,10 @@
 #include "OPCUAServer.h"
 #include "config_parser.h"
 
-#include <gtest/gtest.h>
+#include <chrono>
 #include <limits>
+
+#include <gtest/gtest.h>
 
 #include <wblib/json_utils.h>
 #include <wblib/testing/fake_driver.h>
@@ -255,4 +257,33 @@ TEST_F(TServerTest, value_limits)
     control->SetSingleMeta("max", "");
     ASSERT_EQ(UA_STATUSCODE_GOOD, writeDouble(150));
     ASSERT_EQ("150", control->GetRawValue());
+}
+
+// Driver events coming after the server destruction must not reach it
+TEST_F(TServerTest, no_events_after_destruction)
+{
+    TConfig config;
+    LoadConfig(config, testRootDir + "/bad/wb-mqtt-opcua.conf", schemaFile);
+
+    auto mqttBroker = Testing::NewFakeMqttBroker(*this);
+    auto mqttClient = mqttBroker->MakeClient("test");
+    auto backend = NewDriverBackend(mqttClient);
+    auto driver = NewDriver(TDriverArgs{}.SetId("test").SetBackend(backend));
+    driver->StartLoop();
+    driver->WaitForReady();
+
+    auto server = std::make_unique<OPCUA::TServerImpl>(config.OpcUa, driver);
+    server.reset();
+
+    TPromise<void> received;
+    auto handle = driver->On<TControlValueEvent>([&](const TControlValueEvent&) {
+        if (!received.IsFulfilled()) {
+            received.Complete();
+        }
+    });
+    mqttBroker->Publish("ext", {TMqttMessage{"/devices/test/controls/test/meta/type", "value", 1, true}});
+    mqttBroker->Publish("ext", {TMqttMessage{"/devices/test/controls/test", "1", 1, true}});
+    ASSERT_TRUE(received.GetFuture().WaitFor(std::chrono::seconds(5)));
+    driver->RemoveEventHandler(handle);
+    driver->StopLoop();
 }
