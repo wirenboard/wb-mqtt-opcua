@@ -480,6 +480,28 @@ TEST_F(TServerTest, variable_attributes_update)
     server->ControlValueEventCallback(TControlValueEvent(newControl, "1"));
     ASSERT_EQ(UA_ACCESSLEVELMASK_READ, readAccessLevel());
     ASSERT_EQ(UA_NS0ID_BOOLEAN, readDataType());
+
+    // Meta cleared while a publisher removes the control doesn't change the node of an incomplete control
+    updateMeta(newControl, "type", "");
+    updateMeta(newControl, "readonly", "");
+    ASSERT_EQ(UA_ACCESSLEVELMASK_READ, readAccessLevel());
+    ASSERT_EQ(UA_NS0ID_BOOLEAN, readDataType());
+
+    // The change is applied when the control gets its type back
+    updateMeta(newControl, "type", "switch");
+    ASSERT_EQ(readWrite, readAccessLevel());
+    ASSERT_EQ(UA_NS0ID_BOOLEAN, readDataType());
+
+    // or its value back
+    updateMeta(newControl, "type", "value");
+    ASSERT_EQ(UA_NS0ID_DOUBLE, readDataType());
+    newControl->AcceptValue("");
+    updateMeta(newControl, "readonly", "1");
+    ASSERT_EQ(readWrite, readAccessLevel());
+    newControl->AcceptValue("2");
+    server->ControlValueEventCallback(TControlValueEvent(newControl, "2"));
+    ASSERT_EQ(UA_ACCESSLEVELMASK_READ, readAccessLevel());
+    ASSERT_EQ(UA_NS0ID_DOUBLE, readDataType());
 }
 
 // Driver events coming after the server destruction must not reach it

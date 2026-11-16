@@ -639,6 +639,7 @@ namespace OPCUA
     {
         std::unique_lock<std::mutex> lock(Mutex);
         ControlMap.erase(nodeName);
+        PendingAttributesUpdates.erase(nodeName);
     }
 
     WBMQTT::PControl TServerImpl::GetControl(const std::string& nodeName)
@@ -717,6 +718,12 @@ namespace OPCUA
             dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
             return UA_STATUSCODE_GOOD;
         }
+        if (!ctrl->IsComplete()) {
+            LOG(Debug) << "Control '" + nodeIdName + "' is incomplete";
+            dataValue->hasStatus = true;
+            dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+            return UA_STATUSCODE_GOOD;
+        }
         try {
             dataValue->hasStatus = true;
             if (ctrl->GetError().find("r") != std::string::npos) {
@@ -756,6 +763,9 @@ namespace OPCUA
         }
         std::string nodeName = it->first + "/" + event.Control->GetId();
         if (GetControl(nodeName) == event.Control) {
+            if (IsAttributesUpdatePending(nodeName)) {
+                UpdateVariableAttributes(nodeName, event.Control);
+            }
             return;
         }
         auto isConfigured = [&](const auto& valueNode) { return valueNode.DeviceControlPair == nodeName; };
@@ -803,13 +813,28 @@ namespace OPCUA
             LOG(Warn) << "Control '" << nodeName << "' is removed from MQTT";
             return;
         }
-        if (event.Type == "readonly" || (event.Type == "type" && !event.Value.empty())) {
+        if (event.Type == "readonly" || event.Type == "type") {
             UpdateVariableAttributes(nodeName, event.Control);
         }
     }
 
+    bool TServerImpl::IsAttributesUpdatePending(const std::string& nodeName)
+    {
+        std::unique_lock<std::mutex> lock(Mutex);
+        return PendingAttributesUpdates.count(nodeName) != 0;
+    }
+
     void TServerImpl::UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control)
     {
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            if (!control->IsComplete()) {
+                PendingAttributesUpdates.insert(nodeName);
+                return;
+            }
+            PendingAttributesUpdates.erase(nodeName);
+        }
+
         auto nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
 
         UA_Byte accessLevel = 0;

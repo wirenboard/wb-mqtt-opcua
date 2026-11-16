@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <open62541/plugin/accesscontrol_default.h>
@@ -88,6 +89,7 @@ namespace OPCUA
     private:
         std::mutex Mutex;
         std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
+        std::unordered_set<std::string> PendingAttributesUpdates;
 
         UA_Server* Server;
         volatile UA_Boolean IsRunning;
@@ -98,6 +100,7 @@ namespace OPCUA
         std::vector<WBMQTT::PDriverEventHandlerHandle> EventHandlers;
 
         void RemoveEventHandlers();
+        bool IsAttributesUpdatePending(const std::string& nodeName);
         void UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control);
 
     protected:
