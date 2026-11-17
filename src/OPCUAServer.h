@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <open62541/plugin/accesscontrol_default.h>
@@ -75,7 +76,6 @@ namespace OPCUA
         TServerImpl(const TServerConfig& config, WBMQTT::PDeviceDriver driver);
         ~TServerImpl();
 
-        bool ControlExists(const std::string& nodeName);
         void AddControl(const std::string& nodeName, WBMQTT::PControl control);
         void RemoveControl(const std::string& nodeName);
         WBMQTT::PControl GetControl(const std::string& nodeName);
@@ -84,10 +84,12 @@ namespace OPCUA
         UA_StatusCode ReadVariable(const UA_NodeId* snodeId, UA_DataValue* dataValue);
 
         void ControlValueEventCallback(const WBMQTT::TControlValueEvent& event);
+        void ControlMetaEventCallback(const WBMQTT::TNewExternalDeviceControlMetaEvent& event);
 
     private:
         std::mutex Mutex;
         std::unordered_map<std::string, WBMQTT::PControl> ControlMap;
+        std::unordered_set<std::string> PendingAttributesUpdates;
 
         UA_Server* Server;
         volatile UA_Boolean IsRunning;
@@ -95,6 +97,11 @@ namespace OPCUA
 
         const TServerConfig& Config;
         WBMQTT::PDeviceDriver Driver;
+        std::vector<WBMQTT::PDriverEventHandlerHandle> EventHandlers;
+
+        void RemoveEventHandlers();
+        bool IsAttributesUpdatePending(const std::string& nodeName);
+        void UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control);
 
     protected:
         virtual UA_NodeId CreateObjectNode(const std::string& nodeName);

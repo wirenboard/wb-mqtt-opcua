@@ -1,5 +1,6 @@
 #include "OPCUAServer.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstring>
@@ -112,22 +113,47 @@ namespace
         return &logger;
     }
 
-    void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
+    UA_Byte GetAccessLevel(const WBMQTT::PControl& control)
     {
-        attr.accessLevel =
-            control->IsReadonly() ? UA_ACCESSLEVELMASK_READ : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
-        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)control->GetId().c_str());
-        attr.valueRank = UA_VALUERANK_SCALAR;
-        attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
+        return control->IsReadonly() ? UA_ACCESSLEVELMASK_READ : UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+    }
+
+    UA_NodeId GetDataType(const WBMQTT::PControl& control)
+    {
         try {
             auto v = control->GetValue();
             if (v.Is<bool>()) {
-                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
-            } else if (v.Is<double>()) {
-                attr.dataType = UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
+                return UA_NODEID_NUMERIC(0, UA_NS0ID_BOOLEAN);
+            }
+            if (v.Is<double>()) {
+                return UA_NODEID_NUMERIC(0, UA_NS0ID_DOUBLE);
             }
         } catch (...) {
         }
+        return UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATATYPE);
+    }
+
+    const char* GetDataTypeName(const UA_NodeId& dataType)
+    {
+        if (dataType.namespaceIndex == 0 && dataType.identifierType == UA_NODEIDTYPE_NUMERIC) {
+            switch (dataType.identifier.numeric) {
+                case UA_NS0ID_BOOLEAN:
+                    return "Boolean";
+                case UA_NS0ID_DOUBLE:
+                    return "Double";
+                case UA_NS0ID_BASEDATATYPE:
+                    return "BaseDataType";
+            }
+        }
+        return "unknown";
+    }
+
+    void SetVariableAttributes(UA_VariableAttributes& attr, WBMQTT::PControl control)
+    {
+        attr.accessLevel = GetAccessLevel(control);
+        attr.displayName = UA_LOCALIZEDTEXT((char*)"en-US", (char*)control->GetId().c_str());
+        attr.valueRank = UA_VALUERANK_SCALAR;
+        attr.dataType = GetDataType(control);
     }
 
     void SetServerUrl(UA_ServerConfig* serverCfg, const std::string& url)
@@ -552,30 +578,40 @@ namespace OPCUA
           Config(config),
           Driver(driver)
     {
-        Driver->On<WBMQTT::TControlValueEvent>(
-            [&](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); });
+        try {
+            EventHandlers.push_back(Driver->On<WBMQTT::TControlValueEvent>(
+                [this](const WBMQTT::TControlValueEvent& event) { ControlValueEventCallback(event); }));
+            EventHandlers.push_back(Driver->On<WBMQTT::TNewExternalDeviceControlMetaEvent>(
+                [this](const WBMQTT::TNewExternalDeviceControlMetaEvent& event) { ControlMetaEventCallback(event); }));
 
-        // Load external controls
-        std::vector<std::string> deviceIds;
-        for (const auto& device: config.ObjectNodes) {
-            LOG(Debug) << "'" << device.first << "' is added to filter";
-            deviceIds.emplace_back(device.first);
-        }
-        Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
-        Driver->WaitForReady();
-
-        // Run OPC UA server
-        ServerThread = std::thread([this]() {
-            auto res = UA_Server_run(Server, &IsRunning);
-            if (res != UA_STATUSCODE_GOOD) {
-                LOG(Error) << UA_StatusCode_name(res);
-                exit(1);
+            // Load external controls
+            std::vector<std::string> deviceIds;
+            for (const auto& device: config.ObjectNodes) {
+                LOG(Debug) << "'" << device.first << "' is added to filter";
+                deviceIds.emplace_back(device.first);
             }
-        });
+            Driver->SetFilter(WBMQTT::GetDeviceListFilter(deviceIds));
+            Driver->WaitForReady();
+
+            // Run OPC UA server
+            ServerThread = std::thread([this]() {
+                auto res = UA_Server_run(Server, &IsRunning);
+                if (res != UA_STATUSCODE_GOOD) {
+                    LOG(Error) << UA_StatusCode_name(res);
+                    exit(1);
+                }
+            });
+        } catch (...) {
+            // The destructor isn't called for a partially constructed object
+            RemoveEventHandlers();
+            UA_Server_delete(Server);
+            throw;
+        }
     }
 
     TServerImpl::~TServerImpl()
     {
+        RemoveEventHandlers();
         if (IsRunning) {
             IsRunning = false;
             if (ServerThread.joinable()) {
@@ -587,10 +623,12 @@ namespace OPCUA
         }
     }
 
-    bool TServerImpl::ControlExists(const std::string& nodeName)
+    void TServerImpl::RemoveEventHandlers()
     {
-        std::unique_lock<std::mutex> lock(Mutex);
-        return ControlMap.find(nodeName) != ControlMap.end();
+        for (const auto& handle: EventHandlers) {
+            Driver->RemoveEventHandler(handle);
+        }
+        EventHandlers.clear();
     }
 
     void TServerImpl::AddControl(const std::string& nodeName, WBMQTT::PControl control)
@@ -603,6 +641,7 @@ namespace OPCUA
     {
         std::unique_lock<std::mutex> lock(Mutex);
         ControlMap.erase(nodeName);
+        PendingAttributesUpdates.erase(nodeName);
     }
 
     WBMQTT::PControl TServerImpl::GetControl(const std::string& nodeName)
@@ -620,6 +659,11 @@ namespace OPCUA
             LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
                        << (ctrl ? "It is read only" : "It is not presented in MQTT");
             return UA_STATUSCODE_BADDEVICEFAILURE;
+        }
+        // Without a type, range limits are unknown and the value can't be validated
+        if (!ctrl->IsComplete()) {
+            LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. It is incomplete";
+            return UA_STATUSCODE_BADNOCOMMUNICATION;
         }
         auto tx = Driver->BeginTx();
         try {
@@ -676,7 +720,13 @@ namespace OPCUA
         std::string nodeIdName((const char*)snodeId->identifier.string.data, snodeId->identifier.string.length);
         auto ctrl = GetControl(nodeIdName);
         if (!ctrl) {
-            LOG(Error) << "Control is not found '" + nodeIdName + "'";
+            LOG(Debug) << "Control is not found '" + nodeIdName + "'";
+            dataValue->hasStatus = true;
+            dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
+            return UA_STATUSCODE_GOOD;
+        }
+        if (!ctrl->IsComplete()) {
+            LOG(Debug) << "Control '" + nodeIdName + "' is incomplete";
             dataValue->hasStatus = true;
             dataValue->status = UA_STATUSCODE_BADNOCOMMUNICATION;
             return UA_STATUSCODE_GOOD;
@@ -719,7 +769,14 @@ namespace OPCUA
             return;
         }
         std::string nodeName = it->first + "/" + event.Control->GetId();
-        if (ControlExists(nodeName)) {
+        if (GetControl(nodeName) == event.Control) {
+            if (IsAttributesUpdatePending(nodeName)) {
+                UpdateVariableAttributes(nodeName, event.Control);
+            }
+            return;
+        }
+        auto isConfigured = [&](const auto& valueNode) { return valueNode.DeviceControlPair == nodeName; };
+        if (std::none_of(it->second.begin(), it->second.end(), isConfigured)) {
             return;
         }
         try {
@@ -732,25 +789,90 @@ namespace OPCUA
             auto parentNodeId = parentBpr.Result.statusCode == UA_STATUSCODE_GOOD
                                     ? parentBpr.Result.targets[0].targetId.nodeId
                                     : CreateObjectNode(it->first);
-            for (auto& valueNode: it->second) {
-                if (valueNode.DeviceControlPair != nodeName) {
-                    continue;
-                }
-                browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
-                TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
-                if (childBpr.Result.statusCode != UA_STATUSCODE_GOOD) {
-                    AddControl(nodeName, event.Control);
-                    try {
-                        CreateVariableNode(parentNodeId, nodeName, event.Control);
-                    } catch (...) {
-                        RemoveControl(nodeName);
-                        throw;
-                    }
-                    break;
-                }
+            browseName = UA_QUALIFIEDNAME(1, (char*)event.Control->GetId().c_str());
+            TBrowsePathResult childBpr(UA_Server_browseSimplifiedBrowsePath(Server, parentNodeId, 1, &browseName));
+            AddControl(nodeName, event.Control);
+            if (childBpr.Result.statusCode == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Control '" << nodeName << "' is published again, variable node is bound to it";
+                UpdateVariableAttributes(nodeName, event.Control);
+                return;
+            }
+            try {
+                CreateVariableNode(parentNodeId, nodeName, event.Control);
+            } catch (...) {
+                RemoveControl(nodeName);
+                throw;
             }
         } catch (const std::exception& e) {
             LOG(Error) << "Failed to add control '" << nodeName << "': " << e.what();
+        }
+    }
+
+    void TServerImpl::ControlMetaEventCallback(const WBMQTT::TNewExternalDeviceControlMetaEvent& event)
+    {
+        auto device = event.Control->GetDevice();
+        std::string nodeName = device->GetId() + "/" + event.Control->GetId();
+        if (GetControl(nodeName) != event.Control) {
+            return;
+        }
+        if (device->GetControl(event.Control->GetId()) != event.Control) {
+            RemoveControl(nodeName);
+            LOG(Warn) << "Control '" << nodeName << "' is removed from MQTT";
+            return;
+        }
+        // An empty type is the JSON /meta topic, it may change both readonly and type
+        if (event.Type.empty() || event.Type == "readonly" || event.Type == "type") {
+            UpdateVariableAttributes(nodeName, event.Control);
+        }
+    }
+
+    bool TServerImpl::IsAttributesUpdatePending(const std::string& nodeName)
+    {
+        std::unique_lock<std::mutex> lock(Mutex);
+        return PendingAttributesUpdates.count(nodeName) != 0;
+    }
+
+    void TServerImpl::UpdateVariableAttributes(const std::string& nodeName, WBMQTT::PControl control)
+    {
+        {
+            std::unique_lock<std::mutex> lock(Mutex);
+            if (!control->IsComplete()) {
+                PendingAttributesUpdates.insert(nodeName);
+                return;
+            }
+            PendingAttributesUpdates.erase(nodeName);
+        }
+
+        auto nodeId = UA_NODEID_STRING(1, (char*)nodeName.c_str());
+
+        UA_Byte accessLevel = 0;
+        auto res = UA_Server_readAccessLevel(Server, nodeId, &accessLevel);
+        auto newAccessLevel = GetAccessLevel(control);
+        if (res == UA_STATUSCODE_GOOD && accessLevel != newAccessLevel) {
+            res = UA_Server_writeAccessLevel(Server, nodeId, newAccessLevel);
+            if (res == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Variable node '" << nodeName << "' is "
+                          << (control->IsReadonly() ? "read only" : "writable") << " now";
+            }
+        }
+        if (res != UA_STATUSCODE_GOOD) {
+            LOG(Error) << "Variable node '" << nodeName << "' access level update failed: " << UA_StatusCode_name(res);
+        }
+
+        UA_NodeId dataType;
+        UA_NodeId_init(&dataType);
+        res = UA_Server_readDataType(Server, nodeId, &dataType);
+        auto newDataType = GetDataType(control);
+        if (res == UA_STATUSCODE_GOOD && !UA_NodeId_equal(&dataType, &newDataType)) {
+            res = UA_Server_writeDataType(Server, nodeId, newDataType);
+            if (res == UA_STATUSCODE_GOOD) {
+                LOG(Info) << "Variable node '" << nodeName << "' data type is " << GetDataTypeName(newDataType)
+                          << " now";
+            }
+        }
+        UA_NodeId_clear(&dataType);
+        if (res != UA_STATUSCODE_GOOD) {
+            LOG(Error) << "Variable node '" << nodeName << "' data type update failed: " << UA_StatusCode_name(res);
         }
     }
 

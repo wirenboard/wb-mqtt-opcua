@@ -1,0 +1,14 @@
+Subscribe: /devices/+/meta/driver (QoS 0)
+Subscribe: /devices/test/meta (QoS 0)
+Subscribe: /devices/test/meta/+ (QoS 0)
+Subscribe: /devices/test/controls/+/meta (QoS 0)
+Subscribe: /devices/test/controls/+/meta/+ (QoS 0)
+Subscribe: /devices/test/controls/+ (QoS 0)
+Publish: /devices/test/controls/test/meta/type: 'value' (QoS 1, retained)
+Publish: /devices/test/controls/test: '1' (QoS 1, retained)
+Unsubscribe -- test: /devices/test/controls/+
+Unsubscribe -- test: /devices/test/controls/+/meta
+Unsubscribe -- test: /devices/test/controls/+/meta/+
+Unsubscribe -- test: /devices/test/meta
+Unsubscribe -- test: /devices/test/meta/+
+stop: test
