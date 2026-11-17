@@ -602,7 +602,9 @@ namespace OPCUA
                 }
             });
         } catch (...) {
+            // The destructor isn't called for a partially constructed object
             RemoveEventHandlers();
+            UA_Server_delete(Server);
             throw;
         }
     }
@@ -657,6 +659,11 @@ namespace OPCUA
             LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. "
                        << (ctrl ? "It is read only" : "It is not presented in MQTT");
             return UA_STATUSCODE_BADDEVICEFAILURE;
+        }
+        // Without a type, range limits are unknown and the value can't be validated
+        if (!ctrl->IsComplete()) {
+            LOG(Error) << "Variable node '" + nodeIdName + "' writing failed. It is incomplete";
+            return UA_STATUSCODE_BADNOCOMMUNICATION;
         }
         auto tx = Driver->BeginTx();
         try {
@@ -813,7 +820,8 @@ namespace OPCUA
             LOG(Warn) << "Control '" << nodeName << "' is removed from MQTT";
             return;
         }
-        if (event.Type == "readonly" || event.Type == "type") {
+        // An empty type is the JSON /meta topic, it may change both readonly and type
+        if (event.Type.empty() || event.Type == "readonly" || event.Type == "type") {
             UpdateVariableAttributes(nodeName, event.Control);
         }
     }

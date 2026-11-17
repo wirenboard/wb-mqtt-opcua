@@ -459,6 +459,9 @@ TEST_F(TServerTest, variable_attributes_update)
     // A type cleared while a publisher restarts doesn't change the data type
     updateMeta(control, "type", "");
     ASSERT_EQ(UA_NS0ID_DOUBLE, readDataType());
+    // and writes are rejected, since range limits can't be checked without a type
+    ASSERT_EQ(UA_STATUSCODE_BADNOCOMMUNICATION, writeDouble(3));
+    ASSERT_EQ("2", control->GetRawValue());
     updateMeta(control, "type", "value");
 
     // A text control accepts strings, unlike the Double variable node created for a value one
@@ -466,6 +469,12 @@ TEST_F(TServerTest, variable_attributes_update)
     ASSERT_EQ(UA_NS0ID_BASEDATATYPE, readDataType());
     ASSERT_EQ(UA_STATUSCODE_GOOD, writeString("text"));
     ASSERT_EQ("text", control->GetRawValue());
+
+    // JSON /meta comes as an event with an empty meta type and updates attributes too
+    control->SetSingleMeta("readonly", "1");
+    server->ControlMetaEventCallback(
+        TNewExternalDeviceControlMetaEvent(control, "", "{\"type\":\"text\",\"readonly\":true}"));
+    ASSERT_EQ(UA_ACCESSLEVELMASK_READ, readAccessLevel());
 
     // Attributes of a control published again are taken from its meta
     tx = driver->BeginTx();
