@@ -1,3 +1,11 @@
+wb-mqtt-opcua (1.6.3) stable; urgency=medium
+
+  * Update LICENSE: Wiren Board as the copyright holder,
+    2020 as the first publication year, use restricted to Wiren Board equipment
+  * Fill debian/copyright in the DEP-5 format
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 26 Nov 2026 18:14:15 +0300
+
 wb-mqtt-opcua (1.6.2) stable; urgency=medium
 
   * Fix OPC UA variables not updated when MQTT controls change
